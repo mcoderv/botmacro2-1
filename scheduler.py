@@ -2,11 +2,9 @@
 # mercabot_qwen | SCHEDULER v1.3.0
 # ------------------------------------------------------------------------------
 # Scheduler principal del bot con ventana activa (NY 08:00-17:00 Caracas).
-#
 # v1.3.0: integración de ventana activa (ventana.py) + health endpoint
 # v1.2.x: PYTHONIOENCODING=utf-8 + datetime futura correcta
 # v1.1.x: timeouts, reintentos, supervisord-friendly
-#
 # Stack: Python 3.12 stdlib (no requiere Flask ni dependencias extra).
 # ==============================================================================
 from __future__ import annotations
@@ -66,17 +64,19 @@ except ImportError as e:
     def descripcion_ventana():
         return "Modo 24/7 (sin ventana.py)"
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. CONFIGURACIÓN
 # ──────────────────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parent
 LOG_DIR = PROJECT_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+
 LOG_FILE = LOG_DIR / "scheduler.log"
 PROGRESS_FILE = LOG_DIR / "scheduler_progress.log"
+
 HEALTH_HOST = os.environ.get("HEALTH_HOST", "0.0.0.0")
-HEALTH_PORT = int(os.environ.get("HEALTH_PORT", "8080"))
+# FIX CRÍTICO PARA RENDER: usar PORT si existe (Render lo inyecta), sino HEALTH_PORT, sino 8080
+HEALTH_PORT = int(os.environ.get("PORT", os.environ.get("HEALTH_PORT", "8080")))
 
 # Comando del pipeline. Por defecto usa main.py con --celdas 3.
 # Podés sobreescribirlo con la env: PIPELINE_CMD="python other_script.py"
@@ -98,7 +98,6 @@ _ultimo_ciclo: dict = {
     "error": None,
 }
 _estado_lock = threading.Lock()
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. LOGGING
@@ -125,7 +124,6 @@ try:
 except OSError:
     # Si no se puede escribir el archivo (ej. read-only FS), seguimos con stdout
     pass
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. HEALTH ENDPOINT (para UptimeRobot)
@@ -190,7 +188,6 @@ def _handle_signal(signum, _frame):
 signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 6. EJECUCIÓN DEL PIPELINE
 # ──────────────────────────────────────────────────────────────────────────────
@@ -210,6 +207,7 @@ def ejecutar_pipeline(intento: int = 1) -> bool:
     """
     inicio = time.time()
     inicio_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     logger.info(f"Iniciando pipeline (intento {intento}/{PIPELINE_REINTENTOS})...")
 
     with _estado_lock:
@@ -232,6 +230,7 @@ def ejecutar_pipeline(intento: int = 1) -> bool:
             timeout=PIPELINE_TIMEOUT_SEGUNDOS,
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
+
         if result.returncode == 0:
             exito = True
             logger.info("Pipeline completado exitosamente")
@@ -242,6 +241,7 @@ def ejecutar_pipeline(intento: int = 1) -> bool:
                 # Solo las últimas líneas del stderr (para no llenar el log)
                 stderr_tail = "\n".join(result.stderr.strip().splitlines()[-10:])
                 logger.warning(f"stderr (últimas 10 líneas):\n{stderr_tail}")
+
     except subprocess.TimeoutExpired:
         error_msg = f"timeout ({PIPELINE_TIMEOUT_SEGUNDOS}s)"
         logger.error(f"Pipeline timeout ({PIPELINE_TIMEOUT_SEGUNDOS} segundos)")
