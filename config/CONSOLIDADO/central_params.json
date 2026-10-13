@@ -1,0 +1,309 @@
+{
+  "CENTRAL_PARAMS": {
+    "system": {
+      "ENVIRONMENT": "CAPTURA",
+      "MODO_CAPTURA_RELAJADO": true,
+      "DB_FILE": "C:\\Users\\MD\\Desktop\\VSCODE\\MACRO1\\data\\vault_v2.db",
+      "LOGS_DIR": "C:\\Users\\MD\\Desktop\\VSCODE\\MACRO1\\logs",
+      "BACKUP_DIR": "C:\\Users\\MD\\Desktop\\VSCODE\\MACRO1\\backups",
+      "CONFIG_DIR": "C:\\Users\\MD\\Desktop\\VSCODE\\MACRO1\\config",
+      "PROJECT_ROOT": "C:\\Users\\MD\\Desktop\\VSCODE\\MACRO1",
+      "TZ_NAME": "America/Caracas",
+      "FMT_TIMESTAMP": "%Y-%m-%d %H:%M:%S",
+      "HL_REST_URL": "https://api.hyperliquid.xyz/info",
+      "ARCH_TAG": "v2_maker_5m",
+      "WATCHLIST": [
+        "BTC",
+        "ETH",
+        "SOL",
+        "HYPE",
+        "XRP"
+      ],
+      "TIMEFRAME_MIN": 5,
+      "MAX_OPEN_POSITIONS": 3,
+      "MAX_CORRELATION_GROUP_EXPOSURE": 2
+    },
+    "costos": {
+      "USAR_FEE_MAKER": true,
+      "FEE_MAKER_PCT": 0.00015,
+      "FEE_TAKER_PCT": 0.00045,
+      "APLICAR_FUNDING": true
+    },
+    "portfolio": {
+      "CAPITAL_POR_TRADE_PCT": 0.1,
+      "MAX_DRAWDOWN_HALT_PCT": 0.15,
+      "LEVERAGE_DEFAULT": 3,
+      "MAX_OPEN_POSITIONS": 3,
+      "MAX_CORRELATION_GROUP_EXPOSURE": 2
+    },
+    "radar": {
+      "WATCHLIST": [
+        "BTC",
+        "ETH",
+        "SOL",
+        "HYPE",
+        "XRP"
+      ],
+      "MIN_SCORE": 17,
+      "Z_SCORE_RUPTURA": 1.8,
+      "Z_THRESHOLD_TRENDING": 1.5,
+      "Z_THRESHOLD_RANGING": 1.0,
+      "MAX_Z_MULTIPLIER": 10,
+      "MIN_RR_RATIO": 2.0,
+      "TP_RR_MULTIPLIER": 3.0,
+      "SL_FLOOR_PCT": 0.001,
+      "ATR_SL_MULTIPLIER": 1.5,
+      "CVD_NORM_MIN_THRESHOLD": 0.3,
+      "MIN_CANDLES_1M": 30,
+      "REST_API_TIMEOUT": 10,
+      "USAR_TP_FIJO": false,
+      "TP_FIJO_PCT": 0.15,
+      "COOLDOWN_DEDUPLICACION_SEG": 180,
+      "ZONAS_CACHE_TTL": 3600,
+      "FVG_MAX_GAP_MS": 300000,
+      "MACRO_VETO_THRESHOLD": -2,
+      "MAX_Z_SCORE_ALLOWED": 2.5,
+      "Z_SCORE_SOURCE": "real",
+      "Z_SCORE_TIMEFRAME": "5m",
+      "Z_SCORE_CALC_WINDOW": 50,
+      "ATR_SL_OVERRIDES": {},
+      "MIN_SCORE_OVERRIDES": {},
+      "OBI_UMBRAL": 0.65,
+      "OBI_LOOKBACK": 5
+    },
+    "monitor": {
+      "BREAK_EVEN_GRACE_SEG": 1800,
+      "BREAK_EVEN_ATR_MULT": 1.0,
+      "BREAK_EVEN_BUFFER_PCT": 0.05,
+      "TRAILING_GRACE_PERIOD_SEG": 3600,
+      "TRAILING_ATR_MULTIPLIER": 3.0,
+      "MAX_TP_DISTANCE_PCT": 5.0,
+      "TTL_SEG": null
+    },
+    "persister": {
+      "TIMEFRAME_MIN": 5,
+      "TABLE": "velas_5m",
+      "BACKFILL_CANDLES": 1000,
+      "SYNC_INTERVAL_SEG": 60,
+      "FETCH_WINDOW_SEG": 600
+    },
+    "markov": {
+      "ACTIVADO": true,
+      "MODO_SOMBRA": true,
+      "MIN_PROB_THRESHOLD": 0.6
+    },
+    "funding": {
+      "ACTIVADO": false,
+      "MODO_SOMBRA": true,
+      "FUNDING_UMBRAL": 0.001
+    },
+    "orderbook": {
+      "ACTIVADO": false,
+      "MODO_SOMBRA": true,
+      "OBI_UMBRAL": 0.65,
+      "OBI_LOOKBACK": 5
+    },
+    "liquidity": {
+      "ACTIVADO": false,
+      "SWEEP_LOOKBACK_VELAS": 24,
+      "SWEEP_THRESHOLD_ATR": 1.5,
+      "P_MAGNET_UMBRAL": 0.65
+    },
+    "regime_adj": {
+      "PRESET_AUTO": {
+        "tendencia": "tendencia",
+        "rango": "rango",
+        "caos": "caos"
+      },
+      "REGIMEN_FORZADO": null
+    },
+    "walkforward": {
+      "VENTANA_IN_SAMPLE_DIAS": 7,
+      "VENTANA_OUT_SAMPLE_DIAS": 2,
+      "PURGA_PCT": 0.01,
+      "METODO": "ROLLING_TEMPORAL",
+      "N_SPLITS": 5,
+      "DEFLATED_SHARPE_ACTIVADO": true,
+      "N_TRIALS_ESTIMADOS": 20,
+      "OBJETIVO_PROFIT_FACTOR": 1.8,
+      "OBJETIVO_SHARPE": 2.0,
+      "OBJETIVO_MAX_DRAWDOWN_PCT": 0.08,
+      "OBJETIVO_WIN_RATE_PCT": 0.55,
+      "MIN_TRADES_PARA_VALIDAR": 55,
+      "FILTRAR_COHORTE": true
+    },
+    "macro": {
+      "ACTIVADO": true,
+      "REFRESH_INTERVAL_SEG": 300,
+      "BIAS_THRESHOLD": 0.6,
+      "MARKOV_ACTIVADO": true,
+      "ALL_ASSETS": [
+        "BTC",
+        "ETH",
+        "SOL",
+        "XRP",
+        "AVAX",
+        "HYPE",
+        "xyz:SP500",
+        "xyz:XYZ100",
+        "xyz:GOLD",
+        "xyz:EUR",
+        "xyz:SILVER",
+        "xyz:CL"
+      ]
+    },
+    "backup": {
+      "INTERVAL_SEG": 300,
+      "MAX_BACKUPS": 50
+    },
+    "backtest_overrides": {
+      "ACTIVO": false,
+      "FUENTE": "C7_Hibrido_Wide",
+      "FECHA_OPTIMIZACION": "2026-09-15",
+      "RESULTADO_BACKTEST": {
+        "trades": 6,
+        "win_rate": 0.5,
+        "profit_factor": 2.92,
+        "pnl_total_pct": 8.82,
+        "pnl_avg_pct": 1.47
+      },
+      "radar": {
+        "MIN_SCORE": 17,
+        "Z_SCORE_RUPTURA": 1.8,
+        "Z_THRESHOLD_TRENDING": 1.5,
+        "ATR_SL_MULTIPLIER": 1.5,
+        "TP_RR_MULTIPLIER": 3.0
+      },
+      "monitor": {
+        "BREAK_EVEN_GRACE_SEG": 1800,
+        "TRAILING_GRACE_PERIOD_SEG": 3600,
+        "TRAILING_ATR_MULTIPLIER": 3.0
+      }
+    },
+    "copiloto": {
+      "WATCHLIST_PANEL": [
+        "BTC",
+        "ETH",
+        "SOL",
+        "HYPE",
+        "XRP"
+      ],
+      "WATCHLIST_TELEGRAM": [
+        "BTC",
+        "ETH"
+      ],
+      "REFRESH_PANEL_SEG": 7,
+      "SNAPSHOT_INTERVAL_SEG": 300,
+      "Z_PERIOD": 20,
+      "Z_THRESH": 2.0,
+      "ATR_PERIOD": 14,
+      "EMA_LEN": 50,
+      "VOL_MULT": 1.5,
+      "VOL_PERIOD": 20,
+      "MIN_ATR_PCT": 0.001,
+      "SL_MULT": 1.5,
+      "RR_MULT": 3.0,
+      "BE_GRACE": 1800,
+      "BE_ATR_MULT": 1.0,
+      "BE_BUFFER_PCT": 0.05,
+      "TRAIL_GRACE": 3600,
+      "TRAIL_ATR_MULT": 3.0,
+      "COOLDOWN_BARS": 3,
+      "ALERTAS_ACTIVADAS": true,
+      "ALERTA_SCORE_MIN": 15
+    },
+    "data_quality": {
+      "STRICT_CLOSED_ONLY": true,
+      "ALLOW_FORMING_FALLBACK": true,
+      "MAX_FORMING_FALLBACK_CANDLES": 3,
+      "MAX_FORMING_FALLBACK_RATIO": 0.05,
+      "AUDIT_MODE": true,
+      "PROXY_LABELS": true,
+      "STALE_GRACE_PERIOD_SEG": 300
+    },
+    "validation": {
+      "FFD_WALKFORWARD": true,
+      "FFD_IN_SAMPLE_WARNING": true,
+      "ADF_P_VALUE_THRESHOLD": 0.02,
+      "MIN_TRADES_FOR_WALKFORWARD": 100,
+      "PURGED_EMBARGO": true
+    }
+  },
+  "PRESETS": {
+    "caos": {
+      "name": "caos",
+      "desc": "Mercado ca\u00f3tico \u2014 C7 m\u00e1s estricto: protege capital",
+      "radar": {
+        "MIN_SCORE": 18,
+        "Z_SCORE_RUPTURA": 2.0,
+        "Z_THRESHOLD_TRENDING": 1.5,
+        "ATR_SL_MULTIPLIER": 1.0,
+        "TP_RR_MULTIPLIER": 2.5,
+        "CVD_NORM_MIN_THRESHOLD": 0.4,
+        "MIN_RR_RATIO": 2.0,
+        "MAX_Z_SCORE_ALLOWED": 2.5
+      },
+      "monitor": {
+        "BREAK_EVEN_GRACE_SEG": 900,
+        "TRAILING_GRACE_PERIOD_SEG": 1800,
+        "TRAILING_ATR_MULTIPLIER": 2.5,
+        "BREAK_EVEN_BUFFER_PCT": 0.05,
+        "MAX_TP_DISTANCE_PCT": 5.0
+      },
+      "watchlist_remove": [
+        "HYPE"
+      ]
+    },
+    "rango": {
+      "name": "rango",
+      "desc": "Mercado lateral \u2014 C7_Hibrido_Wide exacto (validado)",
+      "radar": {
+        "MIN_SCORE": 17,
+        "Z_SCORE_RUPTURA": 1.8,
+        "Z_THRESHOLD_TRENDING": 1.5,
+        "ATR_SL_MULTIPLIER": 1.5,
+        "TP_RR_MULTIPLIER": 3.0,
+        "CVD_NORM_MIN_THRESHOLD": 0.3,
+        "MIN_RR_RATIO": 2.0,
+        "MAX_Z_SCORE_ALLOWED": 2.5
+      },
+      "monitor": {
+        "BREAK_EVEN_GRACE_SEG": 1800,
+        "TRAILING_GRACE_PERIOD_SEG": 3600,
+        "TRAILING_ATR_MULTIPLIER": 3.0,
+        "BREAK_EVEN_BUFFER_PCT": 0.05,
+        "MAX_TP_DISTANCE_PCT": 5.0
+      },
+      "watchlist_remove": []
+    },
+    "tendencia": {
+      "name": "tendencia",
+      "desc": "Mercado tendencial \u2014 C7 m\u00e1s permisivo: deja correr",
+      "radar": {
+        "MIN_SCORE": 16,
+        "Z_SCORE_RUPTURA": 1.5,
+        "Z_THRESHOLD_TRENDING": 1.2,
+        "ATR_SL_MULTIPLIER": 2.0,
+        "TP_RR_MULTIPLIER": 4.0,
+        "CVD_NORM_MIN_THRESHOLD": 0.25,
+        "MIN_RR_RATIO": 2.0,
+        "MAX_Z_SCORE_ALLOWED": 3.0
+      },
+      "monitor": {
+        "BREAK_EVEN_GRACE_SEG": 2700,
+        "TRAILING_GRACE_PERIOD_SEG": 5400,
+        "TRAILING_ATR_MULTIPLIER": 4.0,
+        "BREAK_EVEN_BUFFER_PCT": 0.05,
+        "MAX_TP_DISTANCE_PCT": 8.0
+      },
+      "watchlist_remove": []
+    }
+  },
+  "_active_preset": {
+    "name": "rango",
+    "desc": "Mercado lateral \u2014 C7_Hibrido_Wide exacto (validado)",
+    "applied_at": "2026-10-13 15:13:09"
+  },
+  "_saved_at": "2026-10-13T15:13:09.054524",
+  "_version": "v2.8"
+}

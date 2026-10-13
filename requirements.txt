@@ -1,0 +1,31 @@
+# ==============================================================================
+# 🦅 mercabot_qwen | Dependencias del runner local (Windows + VS Code)
+# ==============================================================================
+# Stack confirmado en uso por las celdas adaptadas hasta C3 + T.
+# Rich es opcional: si no está, el runner cae a tabulate.
+# ==============================================================================
+
+# --- Core (ya las tenés instaladas según C0) ---
+pandas>=2.0
+numpy>=1.24
+statsmodels>=0.14        # ADF test (p_value_adf, is_stationary)
+scipy>=1.10             # requerido por statsmodels
+
+# --- Networking (CRÍTICAS para C3 / C2.5) ---
+aiohttp>=3.9            # sesiones async para Hyperliquid REST
+nest-asyncio>=1.6       # permite event loops anidados
+
+# --- Output (ya las usás) ---
+tabulate>=0.9           # tablas en texto plano (fallback si no hay Rich)
+ipywidgets>=8.0         # mencionado en C0; no se usa en el runner local
+                          # pero estaba en el requirements original
+
+# --- Opcionales (mejoran la experiencia) ---
+rich>=13.0              # tablas lindas con bordes y colores (recomendado)
+                          # Si no se instala, el runner usa tabulate sin fallar.
+
+# --- Excluidas intencionalmente ---
+# matplotlib   -> no se usa en el runner local
+# jupyter      -> no se usa (somos .py, no .ipynb)
+# google.colab -> reemplazado por rutas locales
+# python-telegram-bot -> no se usa (el bot se controla por otro proceso)
