@@ -101,4 +101,5 @@ htmlcov/
 # - Archivos de deploy: Dockerfile, litestream.yml, start.sh, .dockerignore
 # - Scripts de validación: validar_ventana.py, validar_gem_macro.py
 # - README.md (si lo creás)
-# ==============================================================================
+# ==============================================================================docker-compose.yml
+.env
