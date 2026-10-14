@@ -1,17 +1,20 @@
 # ==============================================================================
-# mercabot_qwen | CELDA 4: VALIDADOR DE SEÑALES v1.1 (OPCIÓN C)
+# mercabot_qwen | CELDA 4: VALIDADOR DE SEÑALES v1.2
 # ------------------------------------------------------------------------------
 # Propósito:
 # - Registrar TODAS las señales BULL/BEAR (sin filtro de score mínimo)
-# - Etiquetar calidad_senal: ALTA/MEDIA/BAJA/RUIDO según score
+# - Etiquetar calidad_senal: ALTA/MEDIA/BAJA/RUIDO según abs(score)
 # - Resolver señales a 4h/8h/24h capturando el precio futuro
 # - Calcular hit rate, profit factor y max drawdown por tipo de señal
 # - Persistir todo en SQLite para análisis posterior
 #
+# v1.2: Fix crítico — usar abs(score) en clasificación de calidad
+# - SHORT con score -15 ahora se clasifica como "ALTA" (antes caía en "RUIDO")
+# - Permite análisis empírico posterior: "¿abs(score)>=14 tiene mejor hit rate?"
+#
 # v1.1: Opción C — Registra TODO con etiqueta de calidad
-#   - Quitado filtro MIN_SCORE_FOR_SIGNAL
-#   - Agregada columna calidad_senal (ALTA/MEDIA/BAJA/RUIDO)
-#   - Permite análisis empírico posterior: "¿score>=14 tiene mejor hit rate?"
+# - Quitado filtro MIN_SCORE_FOR_SIGNAL
+# - Agregada columna calidad_senal (ALTA/MEDIA/BAJA/RUIDO)
 #
 # Dependencias: C0-C3.5 ejecutadas previamente.
 # Modo: SILENCIOSO (no imprime nada, solo registra y resuelve).
@@ -61,7 +64,7 @@ _clr: Dict[str, str] = _CONFIG.COLORS
 RESOLUTION_WINDOWS_HOURS: List[int] = [4, 8, 24]
 BREAKEVEN_THRESHOLD_PCT: float = 0.05  # ±0.05% se considera breakeven
 
-# Umbrales de calidad de señal (v1.1)
+# Umbrales de calidad de señal (v1.2: se aplican sobre abs(score))
 SCORE_ALTA: int = 14
 SCORE_MEDIA: int = 8
 SCORE_BAJA: int = 4
@@ -71,17 +74,22 @@ def _classify_signal_quality(score: int) -> str:
     """
     Clasifica la calidad de la señal basada en el macro_score.
     
+    v1.2: Usa valor absoluto del score para que las señales SHORT
+    con scores negativos fuertes (ej: -15) se clasifiquen como "ALTA",
+    igual que las señales LONG con scores positivos fuertes (ej: +15).
+    
     Args:
-        score: macro_score de la señal.
+        score: macro_score de la señal (puede ser negativo para SHORT).
     
     Returns:
         "ALTA" | "MEDIA" | "BAJA" | "RUIDO"
     """
-    if score >= SCORE_ALTA:
+    abs_score = abs(score)
+    if abs_score >= SCORE_ALTA:
         return "ALTA"
-    elif score >= SCORE_MEDIA:
+    elif abs_score >= SCORE_MEDIA:
         return "MEDIA"
-    elif score >= SCORE_BAJA:
+    elif abs_score >= SCORE_BAJA:
         return "BAJA"
     else:
         return "RUIDO"
@@ -157,7 +165,7 @@ def _ensure_c4_tables() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_senales_calidad "
                 "ON senales_validadas(calidad_senal)"
             )
-
+            
             # Tabla de snapshots de precios
             _conn.execute("""
                 CREATE TABLE IF NOT EXISTS price_snapshots (
@@ -172,7 +180,7 @@ def _ensure_c4_tables() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_snapshots_activo_ts "
                 "ON price_snapshots(activo, timestamp_unix)"
             )
-
+            
             # Tabla de métricas agregadas
             _conn.execute("""
                 CREATE TABLE IF NOT EXISTS senales_metricas (
@@ -197,7 +205,7 @@ def _ensure_c4_tables() -> None:
                     max_drawdown_pct REAL DEFAULT 0.0
                 )
             """)
-
+            
             # Tabla de log de ejecución (v1.1)
             _conn.execute("""
                 CREATE TABLE IF NOT EXISTS c4_execution_log (
@@ -210,7 +218,7 @@ def _ensure_c4_tables() -> None:
                     duration_seconds REAL DEFAULT 0.0
                 )
             """)
-
+            
             _conn.commit()
     except sqlite3.Error as exc:
         logger.warning(f"C4: error creando tablas: {exc}")
@@ -257,20 +265,20 @@ def _capture_price_snapshots() -> int:
     """
     Captura el precio actual de cada activo en GEM_MACRO_CONTEXT
     y lo almacena en price_snapshots para resolución futura.
-
+    
     Returns:
         Número de snapshots capturados.
     """
     now = int(time.time())
     captured = 0
-
+    
     try:
         with _lock:
             for coin in _assets:
                 z = _gem.get(coin, {})
                 if not isinstance(z, dict):
                     continue
-
+                
                 precio = z.get("precio_ejecucion", 0.0)
                 if precio and precio > 0:
                     _conn.execute(
@@ -282,11 +290,10 @@ def _capture_price_snapshots() -> int:
                         (now, coin, float(precio)),
                     )
                     captured += 1
-
             _conn.commit()
     except sqlite3.Error as exc:
         logger.warning(f"C4: error capturando snapshots: {exc}")
-
+    
     return captured
 
 
@@ -297,33 +304,34 @@ def _register_signals() -> int:
     """
     Registra TODAS las señales BULL/BEAR desde GEM_MACRO_CONTEXT.
     v1.1: Sin filtro de score mínimo, pero etiqueta calidad_senal.
-
+    
     Returns:
         Número de señales registradas.
     """
     now = int(time.time())
     registered = 0
-
+    
     try:
         with _lock:
             for coin in _assets:
                 z = _gem.get(coin, {})
                 if not isinstance(z, dict):
                     continue
-
+                
                 bias_visual = z.get("bias_visual", "RANGO")
                 macro_score = z.get("macro_score", 0)
                 precio = z.get("precio_ejecucion", 0.0)
                 regime = z.get("regime_state", "UNKNOWN")
                 dq = z.get("data_quality_status", "UNKNOWN")
                 cycle_id = z.get("macro_cycle_id", "")
-
+                
                 # v1.1: Registrar TODAS las señales BULL/BEAR (sin filtro de score)
                 if bias_visual not in ("BULL", "BEAR"):
                     continue
+                
                 if not precio or precio <= 0:
                     continue
-
+                
                 # Verificar si ya existe una señal para este activo en este ciclo
                 existing = _conn.execute(
                     """
@@ -332,23 +340,23 @@ def _register_signals() -> int:
                     """,
                     (coin, cycle_id),
                 ).fetchone()
-
+                
                 if existing and existing[0] > 0:
                     continue  # Ya registrada
-
+                
                 # Determinar tipo de señal
                 tipo_senal = "LONG" if bias_visual == "BULL" else "SHORT"
                 
-                # v1.1: Clasificar calidad de señal
+                # v1.2: Clasificar calidad de señal usando abs(score)
                 calidad = _classify_signal_quality(macro_score)
-
+                
                 # Obtener funding y OBI si disponibles
                 fmap = z.get("funding", {})
                 funding_pct = fmap.get("funding_pct", 0.0) if isinstance(fmap, dict) else 0.0
                 obi = z.get("ctx25_obi", 0.0)
-
+                
                 signal_id = f"SIG_{now}_{uuid.uuid4().hex[:8]}"
-
+                
                 _conn.execute(
                     """
                     INSERT INTO senales_validadas
@@ -378,11 +386,11 @@ def _register_signals() -> int:
                     ),
                 )
                 registered += 1
-
+            
             _conn.commit()
     except sqlite3.Error as exc:
         logger.warning(f"C4: error registrando señales: {exc}")
-
+    
     return registered
 
 
@@ -392,11 +400,11 @@ def _register_signals() -> int:
 def _get_price_at_time(activo: str, target_ts: int) -> Optional[float]:
     """
     Busca el precio más cercano a target_ts en price_snapshots.
-
+    
     Args:
         activo: Símbolo del activo.
         target_ts: Timestamp objetivo.
-
+    
     Returns:
         Precio más cercano, o None si no hay datos.
     """
@@ -411,7 +419,6 @@ def _get_price_at_time(activo: str, target_ts: int) -> Optional[float]:
                 """,
                 (activo, target_ts),
             ).fetchone()
-
             return float(row[0]) if row else None
     except sqlite3.Error:
         return None
@@ -424,23 +431,23 @@ def _calculate_pnl_and_result(
 ) -> Tuple[float, str, int]:
     """
     Calcula PnL y resultado de la señal.
-
+    
     Args:
         tipo_senal: LONG o SHORT.
         precio_emision: Precio de emisión.
         precio_resolucion: Precio de resolución.
-
+    
     Returns:
         (pnl_pct, resultado, hit)
     """
     if precio_emision <= 0 or precio_resolucion <= 0:
         return 0.0, "ERROR", 0
-
+    
     if tipo_senal == "LONG":
         pnl_pct = ((precio_resolucion - precio_emision) / precio_emision) * 100
     else:  # SHORT
         pnl_pct = ((precio_emision - precio_resolucion) / precio_emision) * 100
-
+    
     if abs(pnl_pct) <= BREAKEVEN_THRESHOLD_PCT:
         return pnl_pct, "BREAKEVEN", 0
     elif pnl_pct > 0:
@@ -452,20 +459,20 @@ def _calculate_pnl_and_result(
 def _resolve_signals() -> int:
     """
     Resuelve señales pendientes que han cruzado los umbrales de 4h/8h/24h.
-
+    
     v1.2: refactor de locking para evitar deadlock con _get_price_at_time().
     - Antes: un solo `with _lock:` envolvía todo el loop. _get_price_at_time()
       también pide _lock, así que el mismo thread se autobloqueaba al intentar
       resolver la primera señal con age_hours >= 4.
     - Ahora: fetch de pending con lock, se libera, se procesa fuera del lock,
       y los UPDATEs se aplican en una segunda adquisición breve del lock.
-
+    
     Returns:
         Número de resoluciones realizadas.
     """
     now = int(time.time())
     resolved = 0
-
+    
     # 1) Fetch de pendientes (lock breve, solo lectura)
     try:
         with _lock:
@@ -480,12 +487,12 @@ def _resolve_signals() -> int:
     except sqlite3.Error as exc:
         logger.warning(f"C4: error leyendo señales pendientes: {exc}")
         return 0
-
+    
     # 2) Procesar FUERA del lock. _get_price_at_time() puede adquirir el lock
     #    sin deadlock porque ya no lo tenemos tomado.
     updates: List[Tuple[str, Tuple[Any, ...]]] = []
     fully_resolved_ids: List[str] = []
-
+    
     for row in pending:
         (
             signal_id,
@@ -497,10 +504,10 @@ def _resolve_signals() -> int:
             resuelto_8h,
             resuelto_24h,
         ) = row
-
+        
         age_hours = (now - ts_emision) / 3600.0
         did_resolve_24h = False
-
+        
         # Resolver 4h
         if age_hours >= 4 and not resuelto_4h:
             target_ts = ts_emision + 4 * 3600
@@ -519,7 +526,7 @@ def _resolve_signals() -> int:
                     (precio_4h, pnl, resultado, hit, signal_id),
                 ))
                 resolved += 1
-
+        
         # Resolver 8h
         if age_hours >= 8 and not resuelto_8h:
             target_ts = ts_emision + 8 * 3600
@@ -538,7 +545,7 @@ def _resolve_signals() -> int:
                     (precio_8h, pnl, resultado, hit, signal_id),
                 ))
                 resolved += 1
-
+        
         # Resolver 24h
         if age_hours >= 24 and not resuelto_24h:
             target_ts = ts_emision + 24 * 3600
@@ -558,10 +565,10 @@ def _resolve_signals() -> int:
                 ))
                 resolved += 1
                 did_resolve_24h = True
-
+        
         if did_resolve_24h:
             fully_resolved_ids.append(signal_id)
-
+    
     # 3) Aplicar UPDATEs con lock breve y commit al final
     if updates:
         try:
@@ -576,7 +583,7 @@ def _resolve_signals() -> int:
                 _conn.commit()
         except sqlite3.Error as exc:
             logger.warning(f"C4: error aplicando resoluciones: {exc}")
-
+    
     return resolved
 
 
@@ -588,14 +595,14 @@ def _calculate_metrics() -> None:
     Calcula y persiste métricas agregadas por ventana, activo, tipo y calidad de señal.
     """
     now = int(time.time())
-
+    
     try:
         with _lock:
             for ventana in RESOLUTION_WINDOWS_HOURS:
                 col_pnl = f"pnl_pct_{ventana}h"
                 col_hit = f"hit_{ventana}h"
                 col_resuelto = f"resuelto_{ventana}h"
-
+                
                 # Métricas globales
                 rows = _conn.execute(
                     f"""
@@ -604,36 +611,35 @@ def _calculate_metrics() -> None:
                     WHERE {col_resuelto} = 1
                     """
                 ).fetchall()
-
+                
                 if not rows:
                     continue
-
+                
                 pnls = [r[0] for r in rows if r[0] is not None]
                 hits = sum(r[1] for r in rows if r[1] is not None)
                 wins = sum(1 for p in pnls if p > BREAKEVEN_THRESHOLD_PCT)
                 losses = sum(1 for p in pnls if p < -BREAKEVEN_THRESHOLD_PCT)
                 breakevens = len(pnls) - wins - losses
-
                 total_resueltas = len(pnls)
                 hit_rate = hits / total_resueltas if total_resueltas > 0 else 0.0
-
+                
                 # Profit factor
                 gross_profit = sum(p for p in pnls if p > 0)
                 gross_loss = abs(sum(p for p in pnls if p < 0))
                 profit_factor = gross_profit / gross_loss if gross_loss > 0 else (
                     float("inf") if gross_profit > 0 else 0.0
                 )
-
+                
                 avg_pnl = float(np.mean(pnls)) if pnls else 0.0
                 max_win = max(pnls) if pnls else 0.0
                 max_loss = min(pnls) if pnls else 0.0
-
+                
                 # Max drawdown (simplificado: mayor pérdida acumulada)
                 cumulative = np.cumsum(pnls)
                 peak = np.maximum.accumulate(cumulative)
                 drawdown = peak - cumulative
                 max_dd = float(np.max(drawdown)) if len(drawdown) > 0 else 0.0
-
+                
                 _conn.execute(
                     """
                     INSERT INTO senales_metricas
@@ -660,7 +666,7 @@ def _calculate_metrics() -> None:
                         round(max_dd, 4),
                     ),
                 )
-
+                
                 # Métricas por calidad de señal (v1.1)
                 for calidad in ("ALTA", "MEDIA", "BAJA", "RUIDO"):
                     rows_calidad = _conn.execute(
@@ -671,21 +677,21 @@ def _calculate_metrics() -> None:
                         """,
                         (calidad,),
                     ).fetchall()
-
+                    
                     if not rows_calidad:
                         continue
-
+                    
                     pnls_c = [r[0] for r in rows_calidad if r[0] is not None]
                     hits_c = sum(r[1] for r in rows_calidad if r[1] is not None)
                     total_c = len(pnls_c)
                     hr_c = hits_c / total_c if total_c > 0 else 0.0
-
+                    
                     gp_c = sum(p for p in pnls_c if p > 0)
                     gl_c = abs(sum(p for p in pnls_c if p < 0))
                     pf_c = gp_c / gl_c if gl_c > 0 else (
                         float("inf") if gp_c > 0 else 0.0
                     )
-
+                    
                     _conn.execute(
                         """
                         INSERT INTO senales_metricas
@@ -713,8 +719,9 @@ def _calculate_metrics() -> None:
                             0.0,
                         ),
                     )
-
+            
             _conn.commit()
+    
     except sqlite3.Error as exc:
         logger.warning(f"C4: error calculando métricas: {exc}")
 
@@ -759,7 +766,7 @@ def ejecutar_validador_seniales() -> Dict[str, Any]:
     """
     Orquestador principal del validador de señales.
     Ejecuta: snapshot → registro → resolución → métricas → log.
-
+    
     Returns:
         Dict con resumen de la ejecución.
     """
@@ -767,18 +774,19 @@ def ejecutar_validador_seniales() -> Dict[str, Any]:
     
     _ensure_c4_tables()
     _migrate_add_calidad_senal()
-
+    
     snapshots = _capture_price_snapshots()
     registered = _register_signals()
     resolved = _resolve_signals()
-
+    
     # Solo calcular métricas si hay señales resueltas
     if resolved > 0:
         _calculate_metrics()
-
+    
     duration = time.time() - t0
+    
     _log_execution(snapshots, registered, resolved, duration)
-
+    
     return {
         "snapshots_captured": snapshots,
         "signals_registered": registered,
@@ -794,7 +802,7 @@ def ejecutar_validador_seniales() -> Dict[str, Any]:
 def get_signal_summary() -> Dict[str, Any]:
     """
     Devuelve un resumen de señales para el reporter.
-
+    
     Returns:
         Dict con métricas clave.
     """
@@ -804,15 +812,15 @@ def get_signal_summary() -> Dict[str, Any]:
             total = _conn.execute(
                 "SELECT COUNT(*) FROM senales_validadas"
             ).fetchone()[0]
-
+            
             pendientes = _conn.execute(
                 "SELECT COUNT(*) FROM senales_validadas WHERE estado = 'PENDIENTE'"
             ).fetchone()[0]
-
+            
             resueltas = _conn.execute(
                 "SELECT COUNT(*) FROM senales_validadas WHERE estado = 'RESUELTA'"
             ).fetchone()[0]
-
+            
             # Conteos por calidad
             calidad_counts = {}
             for calidad in ("ALTA", "MEDIA", "BAJA", "RUIDO"):
@@ -821,12 +829,13 @@ def get_signal_summary() -> Dict[str, Any]:
                     (calidad,),
                 ).fetchone()[0]
                 calidad_counts[calidad] = count
-
+            
             # Hit rate por ventana
             hit_rates = {}
             for ventana in RESOLUTION_WINDOWS_HOURS:
                 col_hit = f"hit_{ventana}h"
                 col_resuelto = f"resuelto_{ventana}h"
+                
                 row = _conn.execute(
                     f"""
                     SELECT SUM({col_hit}), COUNT(*)
@@ -834,12 +843,12 @@ def get_signal_summary() -> Dict[str, Any]:
                     WHERE {col_resuelto} = 1
                     """
                 ).fetchone()
-
+                
                 if row and row[1] and row[1] > 0:
                     hit_rates[f"{ventana}h"] = round(row[0] / row[1] * 100, 1)
                 else:
                     hit_rates[f"{ventana}h"] = 0.0
-
+            
             return {
                 "total_signals": total,
                 "pending": pendientes,
@@ -847,6 +856,7 @@ def get_signal_summary() -> Dict[str, Any]:
                 "hit_rates": hit_rates,
                 "quality_counts": calidad_counts,
             }
+    
     except sqlite3.Error:
         return {
             "total_signals": 0,
@@ -860,7 +870,7 @@ def get_signal_summary() -> Dict[str, Any]:
 def get_signals_by_regime() -> Dict[str, Dict[str, Any]]:
     """
     Devuelve métricas de señales agrupadas por régimen.
-
+    
     Returns:
         Dict con métricas por régimen.
     """
@@ -874,18 +884,20 @@ def get_signals_by_regime() -> Dict[str, Dict[str, Any]]:
                 GROUP BY bias_regimen
                 """
             ).fetchall()
-
+            
             result = {}
             for row in rows:
                 regime, total, hits, resolved = row
                 hr = (hits / resolved * 100) if resolved and resolved > 0 else 0.0
+                
                 result[regime] = {
                     "total": total,
                     "resolved_24h": resolved,
                     "hit_rate_24h": round(hr, 1),
                 }
-
+            
             return result
+    
     except sqlite3.Error:
         return {}
 
@@ -901,10 +913,10 @@ globals()["get_signals_by_regime"] = get_signals_by_regime
 try:
     _c4_result = ejecutar_validador_seniales()
     globals()["C4_RESULT"] = _c4_result
-
+    
     # Log silencioso (solo a archivo, no a stdout)
     logger.info(
-        f"C4 v1.1: {_c4_result['snapshots_captured']} snapshots, "
+        f"C4 v1.2: {_c4_result['snapshots_captured']} snapshots, "
         f"{_c4_result['signals_registered']} señales registradas, "
         f"{_c4_result['signals_resolved']} resueltas en "
         f"{_c4_result['duration_seconds']}s"
