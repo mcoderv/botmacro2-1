@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  mercabot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mercabot-local
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    volumes:
+      # Montar data/ localmente para inspeccionar la DB si hace falta
+      - ./data:/app/data
+    restart: unless-stopped
