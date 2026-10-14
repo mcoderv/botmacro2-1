@@ -103,3 +103,5 @@ htmlcov/
 # - README.md (si lo creás)
 # ==============================================================================docker-compose.yml
 .env
+docker-compose.yml 
+config/CONSOLIDADO/central_params.json 
