@@ -1,6 +1,8 @@
 # ==============================================================================
-# mercabot_qwen | SCHEDULER v1.3.1
+# mercabot_qwen | SCHEDULER v1.4.1
 # ------------------------------------------------------------------------------
+# v1.4.1: Fix Windows UnicodeDecodeError en subprocess (encoding="utf-8")
+# v1.4.0: Resumen diario automático a Telegram a las 17:00 (Caracas)
 # v1.3.1: Fix para UptimeRobot (agregado do_HEAD para evitar error 501)
 # v1.3.0: integración de ventana activa (ventana.py) + health endpoint
 # v1.2.x: PYTHONIOENCODING=utf-8 + datetime futura correcta
@@ -8,14 +10,18 @@
 # ==============================================================================
 from __future__ import annotations
 
+import json
 import logging
 import os
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
 import time
 import traceback
+import urllib.parse
+import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -122,7 +128,6 @@ class _HealthHandler(BaseHTTPRequestHandler):
         elif self.path == "/status":
             with _estado_lock:
                 ultimo = _ultimo_ciclo.copy()
-            import json
             body = json.dumps(ultimo, default=str).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -161,6 +166,7 @@ def _iniciar_health_server() -> Optional[ThreadingHTTPServer]:
 # 5. SEÑALES (Ctrl+C limpio)
 # ──────────────────────────────────────────────────────────────────────────────
 _shutdown = threading.Event()
+_resumen_enviado_hoy = False  # Control de envío único diario de Telegram
 
 def _handle_signal(signum, _frame):
     logger.info(f"Señal {signum} recibida. Terminando limpiamente...")
@@ -170,7 +176,88 @@ signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 6. EJECUCIÓN DEL PIPELINE
+# 6. NOTIFICACIÓN TELEGRAM
+# ──────────────────────────────────────────────────────────────────────────────
+def enviar_resumen_diario_telegram() -> None:
+    """Envía un resumen diario de métricas a Telegram."""
+    global _resumen_enviado_hoy
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    
+    if not token or not chat_id:
+        logger.warning("⚠️ Variables de Telegram no configuradas. Omitiendo notificación.")
+        return
+
+    try:
+        db_path = PROJECT_ROOT / "data" / "vault_v2.db"
+        conn = sqlite3.connect(str(db_path), timeout=5.0)
+        
+        # 1. Conteos básicos
+        total_senales = conn.execute("SELECT COUNT(*) FROM senales_validadas").fetchone()[0]
+        resueltas_4h = conn.execute("SELECT COUNT(*) FROM senales_validadas WHERE resuelto_4h = 1").fetchone()[0]
+        resueltas_24h = conn.execute("SELECT COUNT(*) FROM senales_validadas WHERE resuelto_24h = 1").fetchone()[0]
+        snapshots = conn.execute("SELECT COUNT(*) FROM price_snapshots").fetchone()[0]
+        
+        try:
+            regimenes = conn.execute("SELECT COUNT(*) FROM gem_macro_snapshot").fetchone()[0]
+        except sqlite3.OperationalError:
+            regimenes = 0
+
+        # 2. Hit Rates
+        hr_4h_data = conn.execute(
+            "SELECT SUM(hit_4h), COUNT(*) FROM senales_validadas WHERE resuelto_4h = 1"
+        ).fetchone()
+        hr_4h = (hr_4h_data[0] / hr_4h_data[1] * 100) if hr_4h_data[1] and hr_4h_data[1] > 0 else 0.0
+        wins_4h = hr_4h_data[0] or 0
+
+        hr_24h_data = conn.execute(
+            "SELECT SUM(hit_24h), COUNT(*) FROM senales_validadas WHERE resuelto_24h = 1"
+        ).fetchone()
+        hr_24h = (hr_24h_data[0] / hr_24h_data[1] * 100) if hr_24h_data[1] and hr_24h_data[1] > 0 else 0.0
+        wins_24h = hr_24h_data[0] or 0
+
+        conn.close()
+
+        # 3. Formatear mensaje
+        ahora = ahora_caracas().strftime("%Y-%m-%d %H:%M")
+        mensaje = (
+            f"🦅 *mercabot_qwen* | Resumen diario\n"
+            f"📅 {ahora} Caracas\n\n"
+            f"📊 *Datos acumulados:*\n"
+            f"• Señales registradas: {total_senales}\n"
+            f"• Señales resueltas (4h): {resueltas_4h}\n"
+            f"• Señales resueltas (24h): {resueltas_24h}\n"
+            f"• Snapshots de precio: {snapshots:,}\n"
+            f"• Estados de régimen: {regimenes:,}\n\n"
+            f"🎯 *Hit rate (resueltas):*\n"
+            f"• Ventana 4h: {hr_4h:.1f}% ({wins_4h}/{resueltas_4h})\n"
+            f"• Ventana 24h: {hr_24h:.1f}% ({wins_24h}/{resueltas_24h})\n\n"
+            f"✅ _Bot activo y corriendo en Render_"
+        )
+
+        # 4. Enviar a Telegram
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = urllib.parse.urlencode({
+            "chat_id": chat_id,
+            "text": mensaje,
+            "parse_mode": "Markdown"
+        }).encode("utf-8")
+        
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            result = json.loads(response.read().decode("utf-8"))
+            if result.get("ok"):
+                logger.info("✅ Resumen diario enviado a Telegram exitosamente.")
+                _resumen_enviado_hoy = True
+            else:
+                logger.error(f"❌ Error al enviar a Telegram: {result}")
+
+    except Exception as exc:
+        logger.error(f"❌ Fallo al generar/enviar resumen de Telegram: {exc}")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 7. EJECUCIÓN DEL PIPELINE
 # ──────────────────────────────────────────────────────────────────────────────
 def _escribir_progress(linea: str) -> None:
     try:
@@ -199,6 +286,7 @@ def ejecutar_pipeline(intento: int = 1) -> bool:
             cwd=str(PROJECT_ROOT),
             capture_output=True,
             text=True,
+            encoding="utf-8",  # <--- FIX CRÍTICO PARA WINDOWS: Forzar decodificación UTF-8
             timeout=PIPELINE_TIMEOUT_SEGUNDOS,
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
@@ -235,11 +323,13 @@ def ejecutar_pipeline(intento: int = 1) -> bool:
     return exito
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 7. LOOP PRINCIPAL
+# 8. LOOP PRINCIPAL
 # ──────────────────────────────────────────────────────────────────────────────
 def main() -> int:
+    global _resumen_enviado_hoy
+    
     logger.info("=" * 70)
-    logger.info("mercabot_qwen | SCHEDULER LOCAL v1.3.1")
+    logger.info("mercabot_qwen | SCHEDULER LOCAL v1.4.1")
     logger.info("=" * 70)
     logger.info(f"Intervalo: {INTERVALO_SEGUNDOS // 60} minutos ({INTERVALO_SEGUNDOS}s)")
     logger.info(f"Ventana: {VENTANA_INICIO:02d}:00-{VENTANA_FIN:02d}:00 ({TZ_NAME})")
@@ -263,7 +353,18 @@ def main() -> int:
             espera = segundos_hasta_proximo_ciclo()
             horas = espera // 3600
             minutos = (espera % 3600) // 60
-            logger.info(f"⏸️  Fuera de ventana ({TZ_NAME}). Durmiendo {horas}h {minutos}m hasta {VENTANA_INICIO:02d}:00")
+            
+            # 🚀 Enviar resumen al cerrar la ventana (aprox 17:00 Caracas)
+            ahora_dt = ahora_caracas()
+            if ahora_dt.hour >= 17 and not _resumen_enviado_hoy:
+                enviar_resumen_diario_telegram()
+            elif ahora_dt.hour < 8:
+                # Resetear la bandera a la madrugada para el próximo día
+                _resumen_enviado_hoy = False
+
+            logger.info(
+                f"⏸️  Fuera de ventana ({TZ_NAME}). Durmiendo {horas}h {minutos}m hasta {VENTANA_INICIO:02d}:00"
+            )
             if _shutdown.wait(timeout=espera):
                 break
             continue
@@ -306,7 +407,7 @@ def main() -> int:
     return 0
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 8. ENTRY POINT
+# 9. ENTRY POINT
 # ──────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     try:
