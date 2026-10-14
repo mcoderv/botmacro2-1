@@ -1,107 +1,44 @@
-# ==============================================================================
-# 🦅 mercabot_qwen | .gitignore para deploy en Render
-# ==============================================================================
+# --- ENTORNOS VIRTUALES Y PYTHON ---
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
 
-# ── Datos y logs (NO commitear - se generan en runtime) ──
+# --- SECRETOS Y CONFIGURACIÓN LOCAL ---
+.env
+.env.local
+docker-compose.yml
+config/CONSOLIDADO/central_params.json
+
+# --- CARPETAS DE DATOS, LOGS Y ARTEFACTOS (NO SUBIR A GITHUB) ---
 data/
 backups/
 logs/
 reportes/
 exports/
-*.db
+textos/
+
+# --- ARCHIVOS TEMPORALES DE SQLITE Y DIAGNÓSTICO ---
 *.db-wal
 *.db-shm
-
-# ── Entorno virtual y cache de Python ──
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# ── Archivos temporales y de diagnóstico ──
-dry_run.py
+carp.txt
+test_telegram.py
 diagnostico_*.py
-test_*.bat
-*.log
 
-# ── Archivos de contexto/chat (muy grandes, no necesarios) ──
-chat*.txt
-*.md
-
-# ── Guías personales ──
-GUIA*.txt
-mercabot_qwen_GUIA*.txt
-
-# ── Scripts Windows locales (Render usa Linux) ──
-scheduler.bat
-verificar_progreso.bat
-
-# ── Variables de entorno (NUNCA commitear secretos) ──
+# --- ARCHIVOS LOCALES (NO SUBIR) ---
+data/
+logs/
+backups/
+reportes/
+exports/
+textos/
+.venv/
+__pycache__/
+*.pyc
 .env
-.env.local
-.env.*.local
-
-# ── IDE y editores ──
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.project
-.pydevproject
-.settings/
-
-# ── OS files ──
-.DS_Store
-.AppleDouble
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-desktop.ini
-
-# ── Jupyter Notebook (si algún día se usa) ──
-.ipynb_checkpoints/
-*.ipynb
-
-# ── Pytest ──
-.cache/
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# ── mypy ──
-.mypy_cache/
-
-# ==============================================================================
-# ✅ Archivos que SÍ se commitean:
-# ==============================================================================
-# - Todos los archivos .py del bot (C0-C4, main.py, scheduler.py, ventana.py, etc.)
-# - requirements.txt
-# - Archivos de deploy: Dockerfile, litestream.yml, start.sh, .dockerignore
-# - Scripts de validación: validar_ventana.py, validar_gem_macro.py
-# - README.md (si lo creás)
-# ==============================================================================docker-compose.yml
-.env
-docker-compose.yml 
-config/CONSOLIDADO/central_params.json 
+docker-compose.yml
+config/CONSOLIDADO/central_params.json
+*.txt
+!requirements.txt
