@@ -1,6 +1,7 @@
 # ==============================================================================
-# mercabot_qwen | SCHEDULER v1.4.1
+# mercabot_qwen | SCHEDULER v1.4.2
 # ------------------------------------------------------------------------------
+# v1.4.2: Mensaje Telegram mejorado con métricas de rentabilidad y desglose LONG/SHORT
 # v1.4.1: Fix Windows UnicodeDecodeError en subprocess (encoding="utf-8")
 # v1.4.0: Resumen diario automático a Telegram a las 17:00 (Caracas)
 # v1.3.1: Fix para UptimeRobot (agregado do_HEAD para evitar error 501)
@@ -176,10 +177,13 @@ signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 6. NOTIFICACIÓN TELEGRAM
+# 6. NOTIFICACIÓN TELEGRAM (v1.4.2: MÉTRICAS MEJORADAS)
 # ──────────────────────────────────────────────────────────────────────────────
 def enviar_resumen_diario_telegram() -> None:
-    """Envía un resumen diario de métricas a Telegram."""
+    """
+    Envía un resumen diario de métricas a Telegram.
+    v1.4.2: Incluye rentabilidad (PF, PnL, Expectancy, DD) y desglose LONG/SHORT.
+    """
     global _resumen_enviado_hoy
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -216,9 +220,103 @@ def enviar_resumen_diario_telegram() -> None:
         hr_24h = (hr_24h_data[0] / hr_24h_data[1] * 100) if hr_24h_data[1] and hr_24h_data[1] > 0 else 0.0
         wins_24h = hr_24h_data[0] or 0
 
+        # 3. Métricas de rentabilidad (24h)
+        pnl_data = conn.execute(
+            "SELECT pnl_pct_24h FROM senales_validadas WHERE resuelto_24h = 1 AND pnl_pct_24h IS NOT NULL"
+        ).fetchall()
+        
+        if pnl_data:
+            pnls = [row[0] for row in pnl_data]
+            avg_pnl = sum(pnls) / len(pnls)
+            
+            # Profit Factor
+            gross_profit = sum(p for p in pnls if p > 0)
+            gross_loss = abs(sum(p for p in pnls if p < 0))
+            profit_factor = gross_profit / gross_loss if gross_loss > 0 else (
+                float("inf") if gross_profit > 0 else 0.0
+            )
+            if profit_factor == float("inf"):
+                profit_factor = 999.0
+            
+            # Expectancy
+            expectancy = avg_pnl * (hr_24h / 100)
+            
+            # Max Drawdown (simplificado)
+            cumulative = []
+            running_sum = 0
+            for p in pnls:
+                running_sum += p
+                cumulative.append(running_sum)
+            
+            if cumulative:
+                peak = cumulative[0]
+                max_dd = 0
+                for val in cumulative:
+                    if val > peak:
+                        peak = val
+                    dd = peak - val
+                    if dd > max_dd:
+                        max_dd = dd
+            else:
+                max_dd = 0
+        else:
+            avg_pnl = 0.0
+            profit_factor = 0.0
+            expectancy = 0.0
+            max_dd = 0.0
+
+        # 4. Desglose LONG vs SHORT (24h)
+        long_data = conn.execute(
+            """
+            SELECT COUNT(*), SUM(hit_24h), AVG(pnl_pct_24h)
+            FROM senales_validadas
+            WHERE resuelto_24h = 1 AND tipo_senal = 'LONG'
+            """
+        ).fetchone()
+        
+        short_data = conn.execute(
+            """
+            SELECT COUNT(*), SUM(hit_24h), AVG(pnl_pct_24h)
+            FROM senales_validadas
+            WHERE resuelto_24h = 1 AND tipo_senal = 'SHORT'
+            """
+        ).fetchone()
+        
+        # LONG metrics
+        long_total = long_data[0] if long_data and long_data[0] else 0
+        long_hits = long_data[1] if long_data and long_data[1] else 0
+        long_hr = (long_hits / long_total * 100) if long_total > 0 else 0.0
+        
+        # LONG Profit Factor
+        long_pnls = conn.execute(
+            "SELECT pnl_pct_24h FROM senales_validadas WHERE resuelto_24h = 1 AND tipo_senal = 'LONG' AND pnl_pct_24h IS NOT NULL"
+        ).fetchall()
+        if long_pnls:
+            long_gp = sum(row[0] for row in long_pnls if row[0] > 0)
+            long_gl = abs(sum(row[0] for row in long_pnls if row[0] < 0))
+            long_pf = long_gp / long_gl if long_gl > 0 else (999.0 if long_gp > 0 else 0.0)
+        else:
+            long_pf = 0.0
+        
+        # SHORT metrics
+        short_total = short_data[0] if short_data and short_data[0] else 0
+        short_hits = short_data[1] if short_data and short_data[1] else 0
+        short_hr = (short_hits / short_total * 100) if short_total > 0 else 0.0
+        
+        # SHORT Profit Factor
+        short_pnls = conn.execute(
+            "SELECT pnl_pct_24h FROM senales_validadas WHERE resuelto_24h = 1 AND tipo_senal = 'SHORT' AND pnl_pct_24h IS NOT NULL"
+        ).fetchall()
+        if short_pnls:
+            short_gp = sum(row[0] for row in short_pnls if row[0] > 0)
+            short_gl = abs(sum(row[0] for row in short_pnls if row[0] < 0))
+            short_pf = short_gp / short_gl if short_gl > 0 else (999.0 if short_gp > 0 else 0.0)
+        else:
+            short_pf = 0.0
+
         conn.close()
 
-        # 3. Formatear mensaje
+        # 5. Formatear mensaje
         ahora = ahora_caracas().strftime("%Y-%m-%d %H:%M")
         mensaje = (
             f"🦅 *mercabot_qwen* | Resumen diario\n"
@@ -232,10 +330,18 @@ def enviar_resumen_diario_telegram() -> None:
             f"🎯 *Hit rate (resueltas):*\n"
             f"• Ventana 4h: {hr_4h:.1f}% ({wins_4h}/{resueltas_4h})\n"
             f"• Ventana 24h: {hr_24h:.1f}% ({wins_24h}/{resueltas_24h})\n\n"
+            f"💰 *Rentabilidad (24h):*\n"
+            f"• Profit Factor: {profit_factor:.2f}\n"
+            f"• PnL promedio: {avg_pnl:.2f}%\n"
+            f"• Expectancy: {expectancy:.2f}% por trade\n"
+            f"• Max Drawdown: {max_dd:.2f}%\n\n"
+            f"📈 *Desglose LONG vs SHORT (24h):*\n"
+            f"• LONG: HR {long_hr:.1f}% | PF {long_pf:.2f} | {long_total} señales\n"
+            f"• SHORT: HR {short_hr:.1f}% | PF {short_pf:.2f} | {short_total} señales\n\n"
             f"✅ _Bot activo y corriendo en Render_"
         )
 
-        # 4. Enviar a Telegram
+        # 6. Enviar a Telegram
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         data = urllib.parse.urlencode({
             "chat_id": chat_id,
@@ -329,7 +435,7 @@ def main() -> int:
     global _resumen_enviado_hoy
     
     logger.info("=" * 70)
-    logger.info("mercabot_qwen | SCHEDULER LOCAL v1.4.1")
+    logger.info("mercabot_qwen | SCHEDULER LOCAL v1.4.2")
     logger.info("=" * 70)
     logger.info(f"Intervalo: {INTERVALO_SEGUNDOS // 60} minutos ({INTERVALO_SEGUNDOS}s)")
     logger.info(f"Ventana: {VENTANA_INICIO:02d}:00-{VENTANA_FIN:02d}:00 ({TZ_NAME})")
