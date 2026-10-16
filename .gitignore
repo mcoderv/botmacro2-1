@@ -41,4 +41,5 @@ __pycache__/
 docker-compose.yml
 config/CONSOLIDADO/central_params.json
 *.txt
-!requirements.txt
+!requirements.txtscheduler.bat 
+verificar_progreso.bat 
