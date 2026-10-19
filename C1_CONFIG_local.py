@@ -10,10 +10,20 @@ from pathlib import Path
 
 # ── 0. RESOLUCIÓN DE RUTAS BASE (compartido con el resto del proyecto) ──
 #    PROJECT_ROOT puede venir del runner; si no, se infiere de este archivo.
-PROJECT_ROOT = Path(os.environ.get(
-    "MACRO1_ROOT",
-    Path(__file__).resolve().parent
-)).resolve()
+# ── Detección inteligente de entorno ──
+# En Windows local: siempre usar la ruta del archivo (ignora MACRO1_ROOT).
+# En Docker/Render (Linux con /app): respetar MACRO1_ROOT si existe.
+# Esto evita que variables de entorno "fantasma" rompan el entorno local.
+def _resolve_project_root() -> "Path":
+    file_dir = Path(__file__).resolve().parent
+    is_container = (os.name != "nt") and Path("/app").exists()
+    if is_container:
+        env_root = os.environ.get("MACRO1_ROOT")
+        if env_root:
+            return Path(env_root).resolve()
+    return file_dir
+
+PROJECT_ROOT = _resolve_project_root()
 
 DATA_DIR    = PROJECT_ROOT / "data"
 CONFIG_DIR  = PROJECT_ROOT / "config"

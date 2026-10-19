@@ -1,0 +1,10 @@
+version: '3.8'
+
+services:
+  mercabot:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    working_dir: /app

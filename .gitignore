@@ -6,13 +6,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# --- SECRETOS Y CONFIGURACIÓN LOCAL ---
+# --- SECRETOS Y CREDENCIALES (CRÍTICO) ---
 .env
 .env.local
-docker-compose.yml
+litestream.yml
 config/CONSOLIDADO/central_params.json
 
-# --- CARPETAS DE DATOS, LOGS Y ARTEFACTOS (NO SUBIR A GITHUB) ---
+# --- CARPETAS DE DATOS, LOGS Y ARTEFACTOS ---
 data/
 backups/
 logs/
@@ -20,26 +20,18 @@ reportes/
 exports/
 textos/
 
-# --- ARCHIVOS TEMPORALES DE SQLITE Y DIAGNÓSTICO ---
+# --- ARCHIVOS TEMPORALES DE SQLITE ---
 *.db-wal
 *.db-shm
-carp.txt
-test_telegram.py
-diagnostico_*.py
+*.db.tmp-shm
+*.db.tmp-wal
+.vault_v2.db-litestream/
 
-# --- ARCHIVOS LOCALES (NO SUBIR) ---
-data/
-logs/
-backups/
-reportes/
-exports/
-textos/
-.venv/
-__pycache__/
-*.pyc
-.env
-docker-compose.yml
-config/CONSOLIDADO/central_params.json
+# --- SCRIPTS DE DIAGNÓSTICO TEMPORALES ---
+diagnostico_*.py
+carp.txt
 *.txt
-!requirements.txtscheduler.bat 
-verificar_progreso.bat 
+!requirements.txt
+
+# --- ARCHIVOS LOCALES DE WINDOWS ---
+verificar_progreso.bat
