@@ -1,7 +1,7 @@
 # ==============================================================================
 # mercabot_qwen | SCHEDULER v2.0
 # ------------------------------------------------------------------------------
-# v2.0: Doble envío diario (8 AM y 5 PM) + métricas de salud + desgloses v2
+# v2.0: Doble envío diario (8:30 AM y 5 PM) + métricas de salud + desgloses v2
 # v1.4.2: Mensaje Telegram mejorado con métricas de rentabilidad y desglose LONG/SHORT
 # v1.4.1: Fix Windows UnicodeDecodeError en subprocess (encoding="utf-8")
 # v1.4.0: Resumen diario automático a Telegram a las 17:00 (Caracas)
@@ -156,7 +156,7 @@ def _iniciar_health_server() -> Optional[ThreadingHTTPServer]:
 # 5. SEÑALES (Ctrl+C limpio)
 # ──────────────────────────────────────────────────────────────────────────────
 _shutdown = threading.Event()
-_resumen_enviado_manana = False  # Control de envío único diario 8 AM
+_resumen_enviado_manana = False  # Control de envío único diario 8:30 AM
 _resumen_enviado_tarde = False   # Control de envío único diario 5 PM
 
 def _handle_signal(signum, _frame):
@@ -697,7 +697,7 @@ def main() -> int:
     logger.info(f"Log file: {LOG_FILE}")
     logger.info(f"Progress file: {PROGRESS_FILE}")
     logger.info(f"Health: http://{HEALTH_HOST}:{HEALTH_PORT}/health")
-    logger.info("Telegram: Doble envío diario (8 AM y 5 PM Caracas)")
+    logger.info("Telegram: Doble envío diario (8:30 AM y 5 PM Caracas)")
     logger.info("Presiona Ctrl+C para detener")
     logger.info("=" * 70)
     
@@ -715,17 +715,18 @@ def main() -> int:
             horas = espera // 3600
             minutos = (espera % 3600) // 60
             
-            # 🚀 Enviar resumen según la hora (8 AM o 5 PM Caracas)
+            # 🚀 Enviar resumen según la hora (8:30 AM o 5 PM Caracas)
             ahora_dt = ahora_caracas()
             hora_actual = ahora_dt.hour
+            minuto_actual = ahora_dt.minute
             
             # Resetear banderas a la medianoche
-            if hora_actual == 0 and ahora_dt.minute < 15:
+            if hora_actual == 0 and minuto_actual < 15:
                 _resumen_enviado_manana = False
                 _resumen_enviado_tarde = False
             
-            # Enviar resumen matutino (8 AM)
-            if 8 <= hora_actual < 9 and not _resumen_enviado_manana:
+            # Enviar resumen matutino (8:30 AM)
+            if hora_actual == 8 and 30 <= minuto_actual < 45 and not _resumen_enviado_manana:
                 enviar_resumen_diario_telegram(periodo="manana")
             
             # Enviar resumen vespertino (5 PM)

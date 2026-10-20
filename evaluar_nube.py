@@ -8,6 +8,7 @@ Uso:
   python evaluar_nube.py                          evalúa data/vault_v2_cloud.db
   python evaluar_nube.py --db data/vault_v2.db    evalúa otra DB
   python evaluar_nube.py --comparar               compara nube vs local
+  python evaluar_nube.py --desde-t0               evalúa solo datos post-T_0 (OOS)
 """
 import argparse
 import sqlite3
@@ -20,6 +21,8 @@ from statistics import median
 WINDOWS = [4, 8, 24]
 BE = 0.05  # umbral breakeven en %
 TABLE = "senales_validadas"
+# T_0 oficial del deploy: 2026-10-19 18:00:00 UTC en formato Unix timestamp
+T0_TIMESTAMP_INT = 1792432800  
 
 
 # ─────────────────────────── utilidades ───────────────────────────
@@ -70,29 +73,47 @@ def drawdown(pnls_ordenados) -> float:
     return max_dd
 
 
+def build_where(desde_t0: bool, extra_conditions: list = None) -> str:
+    """Construye la cláusula WHERE de forma segura combinando condiciones."""
+    conditions = []
+    if extra_conditions:
+        conditions.extend(extra_conditions)
+    if desde_t0:
+        conditions.append(f"timestamp_emision >= {T0_TIMESTAMP_INT}")
+    
+    if not conditions:
+        return ""
+    return "WHERE " + " AND ".join(conditions)
+
+
 # ─────────────────────────── resumen global ───────────────────────────
-def resumen(conn) -> None:
+def resumen(conn, desde_t0: bool = False) -> None:
     cols = columns(conn, TABLE)
     if not cols:
         print(f"❌ La tabla {TABLE} no existe en esta DB.")
         return
 
-    total = conn.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()[0]
+    where = build_where(desde_t0)
+    total = conn.execute(f"SELECT COUNT(*) FROM {TABLE} {where}").fetchone()[0]
+    
     seccion("1. RESUMEN GLOBAL")
+    if desde_t0:
+        print(f"  🔍 FILTRO ACTIVO: Solo datos post-T_0 (Unix >= {T0_TIMESTAMP_INT} | 2026-10-19 18:00 UTC)")
     print(f"  📊 Total de señales registradas : {total}")
 
     if total == 0:
-        print("  ⚠️  La base de datos está vacía.")
+        print("  ⚠️  La base de datos está vacía (o no hay datos post-T_0).")
         return
 
     if "estado" in cols:
         for est in ("PENDIENTE", "RESUELTA"):
-            n = conn.execute(f"SELECT COUNT(*) FROM {TABLE} WHERE estado=?", (est,)).fetchone()[0]
+            est_where = build_where(desde_t0, [f"estado='{est}'"])
+            n = conn.execute(f"SELECT COUNT(*) FROM {TABLE} {est_where}").fetchone()[0]
             print(f"     • {est:<10}: {n}")
 
     if "timestamp_emision" in cols:
         r = conn.execute(
-            f"SELECT MIN(timestamp_emision), MAX(timestamp_emision) FROM {TABLE}"
+            f"SELECT MIN(timestamp_emision), MAX(timestamp_emision) FROM {TABLE} {where}"
         ).fetchone()
         print(f"  📅 Rango temporal             : {ts_a_fecha(r[0])} → {ts_a_fecha(r[1])}")
         dias = (int(r[1]) - int(r[0])) / 86400 if r[0] and r[1] else 0
@@ -106,9 +127,8 @@ def resumen(conn) -> None:
           f"{'✅ SÍ' if 'calidad_senal_v2' in cols else '❌ NO'} (calidad_senal_v2)")
 
     if "macro_score_v2" in cols:
-        n_v2 = conn.execute(
-            f"SELECT COUNT(*) FROM {TABLE} WHERE macro_score_v2 IS NOT NULL AND macro_score_v2 != 0.0"
-        ).fetchone()[0]
+        v2_where = build_where(desde_t0, ["macro_score_v2 IS NOT NULL", "macro_score_v2 != 0.0"])
+        n_v2 = conn.execute(f"SELECT COUNT(*) FROM {TABLE} {v2_where}").fetchone()[0]
         print(f"     • Señales con score v2 real: {n_v2}")
 
     if table_exists(conn, "price_snapshots"):
@@ -117,19 +137,19 @@ def resumen(conn) -> None:
 
 
 # ─────────────────────────── métricas por ventana ───────────────────────────
-def metricas_ventana(conn, ventana: int):
+def metricas_ventana(conn, ventana: int, desde_t0: bool = False):
     cols = columns(conn, TABLE)
     c_pnl = f"pnl_pct_{ventana}h"
     c_res = f"resuelto_{ventana}h"
-    c_resulado = f"resultado_{ventana}h"
 
     if c_pnl not in cols or c_res not in cols:
         return None
 
+    where = build_where(desde_t0, [f"{c_res}=1", f"{c_pnl} IS NOT NULL"])
     orden = "timestamp_emision" if "timestamp_emision" in cols else "id"
+    
     rows = conn.execute(
-        f"SELECT {c_pnl} AS pnl FROM {TABLE} "
-        f"WHERE {c_res}=1 AND {c_pnl} IS NOT NULL ORDER BY {orden}"
+        f"SELECT {c_pnl} AS pnl FROM {TABLE} {where} ORDER BY {orden}"
     ).fetchall()
 
     pnls = [float(r["pnl"]) for r in rows]
@@ -163,10 +183,10 @@ def metricas_ventana(conn, ventana: int):
     }
 
 
-def bloque_rentabilidad(conn) -> None:
+def bloque_rentabilidad(conn, desde_t0: bool = False) -> None:
     seccion("2. RENTABILIDAD Y RIESGO POR VENTANA")
     for v in WINDOWS:
-        m = metricas_ventana(conn, v)
+        m = metricas_ventana(conn, v, desde_t0)
         if m is None:
             print(f"\n  📏 Ventana {v}h: columnas no disponibles en esta DB.")
             continue
@@ -188,16 +208,17 @@ def bloque_rentabilidad(conn) -> None:
 
 
 # ─────────────────────────── desgloses ───────────────────────────
-def desglose(conn, columna: str, titulo: str, ventana: int = 24, minimo: int = 5) -> None:
+def desglose(conn, columna: str, titulo: str, ventana: int = 24, minimo: int = 5, desde_t0: bool = False) -> None:
     cols = columns(conn, TABLE)
     c_pnl = f"pnl_pct_{ventana}h"
     c_res = f"resuelto_{ventana}h"
     if columna not in cols or c_pnl not in cols or c_res not in cols:
         return
 
+    where = build_where(desde_t0, [f"{c_res}=1", f"{c_pnl} IS NOT NULL"])
+
     rows = conn.execute(
-        f"SELECT {columna} AS k, {c_pnl} AS pnl FROM {TABLE} "
-        f"WHERE {c_res}=1 AND {c_pnl} IS NOT NULL"
+        f"SELECT {columna} AS k, {c_pnl} AS pnl FROM {TABLE} {where}"
     ).fetchall()
     if not rows:
         return
@@ -235,33 +256,43 @@ def desglose(conn, columna: str, titulo: str, ventana: int = 24, minimo: int = 5
 
 
 # ─────────────────────────── comparación ───────────────────────────
-def snapshot_db(path: str) -> dict:
+def snapshot_db(path: str, desde_t0: bool = False) -> dict:
     if not Path(path).exists():
         return {"existe": False, "path": path}
     conn = connect(path)
     out = {"existe": True, "path": path, "total": 0, "cols": set(), "v2_reales": 0,
            "min_ts": None, "max_ts": None, "resueltas_24h": 0}
+    
     if table_exists(conn, TABLE):
         out["cols"] = columns(conn, TABLE)
-        out["total"] = conn.execute(f"SELECT COUNT(*) FROM {TABLE}").fetchone()[0]
-        r = conn.execute(f"SELECT MIN(timestamp_emision), MAX(timestamp_emision) FROM {TABLE}").fetchone()
+        
+        where = build_where(desde_t0)
+        out["total"] = conn.execute(f"SELECT COUNT(*) FROM {TABLE} {where}").fetchone()[0]
+        
+        r = conn.execute(f"SELECT MIN(timestamp_emision), MAX(timestamp_emision) FROM {TABLE} {where}").fetchone()
         out["min_ts"], out["max_ts"] = r[0], r[1]
+        
         if "resuelto_24h" in out["cols"]:
-            out["resueltas_24h"] = conn.execute(
-                f"SELECT COUNT(*) FROM {TABLE} WHERE resuelto_24h=1"
-            ).fetchone()[0]
+            resuelto_where = build_where(desde_t0, ["resuelto_24h=1"])
+            out["resueltas_24h"] = conn.execute(f"SELECT COUNT(*) FROM {TABLE} {resuelto_where}").fetchone()[0]
+            
         if "macro_score_v2" in out["cols"]:
-            out["v2_reales"] = conn.execute(
-                f"SELECT COUNT(*) FROM {TABLE} WHERE macro_score_v2 IS NOT NULL AND macro_score_v2 != 0.0"
-            ).fetchone()[0]
+            v2_where = build_where(desde_t0, ["macro_score_v2 IS NOT NULL", "macro_score_v2 != 0.0"])
+            out["v2_reales"] = conn.execute(f"SELECT COUNT(*) FROM {TABLE} {v2_where}").fetchone()[0]
+            
     conn.close()
     return out
 
 
-def comparar(local: str, nube: str) -> None:
-    a = snapshot_db(local)
-    b = snapshot_db(nube)
-    seccion("COMPARACIÓN: DB LOCAL  vs  DB NUBE")
+def comparar(local: str, nube: str, desde_t0: bool = False) -> None:
+    a = snapshot_db(local, desde_t0)
+    b = snapshot_db(nube, desde_t0)
+    
+    titulo = "COMPARACIÓN: DB LOCAL  vs  DB NUBE"
+    if desde_t0:
+        titulo += f" (solo post-T_0: Unix >= {T0_TIMESTAMP_INT})"
+    
+    seccion(titulo)
 
     def fila(label, va, vb):
         print(f"  {label:<30}{str(va):<26}{str(vb):<26}")
@@ -271,7 +302,7 @@ def comparar(local: str, nube: str) -> None:
     fila("Archivo", Path(local).name, Path(nube).name)
     fila("Existe", "✅" if a["existe"] else "❌", "✅" if b["existe"] else "❌")
     if not (a["existe"] and b["existe"]):
-        print("\n  ⚠️  Falta alguna DB. Descarga la nube primero (ver pasos 1-3).")
+        print("\n  ⚠️  Falta alguna DB. Descarga la nube primero.")
         return
 
     fila("Total señales", a["total"], b["total"])
@@ -293,7 +324,7 @@ def comparar(local: str, nube: str) -> None:
     if a["v2_reales"] > 0 and b["v2_reales"] == 0:
         print("     • Solo el LOCAL tiene señales con macro_score_v2 poblado.")
         print("       → NO sobrescribas el local con la nube: perderías el arranque del OOS.")
-        print("       → La nube aún corre C4 v1.2 (falta push a GitHub).")
+        print("       → La nube aún corre una versión antigua (falta push a GitHub).")
     if b["v2_reales"] > 0:
         print("     • La nube YA tiene señales v2: el deploy de Render sí tomó los cambios.")
 
@@ -306,15 +337,16 @@ def main() -> None:
     ap.add_argument("--ventana", type=int, default=24, choices=WINDOWS, help="Ventana de desgloses")
     ap.add_argument("--minimo", type=int, default=5, help="Mínimo de señales por grupo")
     ap.add_argument("--comparar", action="store_true", help="Comparar local vs nube")
+    ap.add_argument("--desde-t0", action="store_true", help="Filtrar solo datos post-T_0 (OOS)")
     args = ap.parse_args()
 
     print("═" * 82)
-    print("  🦅 mercabot_qwen | EVALUADOR DE DATOS v1.0  (READ-ONLY)")
+    print("  🦅 mercabot_qwen | EVALUADOR DE DATOS v1.1  (READ-ONLY)")
     print("═" * 82)
     print(f"  📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     if args.comparar:
-        comparar(args.local, args.db)
+        comparar(args.local, args.db, args.desde_t0)
 
     if not Path(args.db).exists():
         print(f"\n❌ No existe {args.db}. Ejecuta primero la restauración desde R2.")
@@ -323,13 +355,13 @@ def main() -> None:
     print(f"\n  🗄️  Evaluando: {Path(args.db).resolve()}")
     conn = connect(args.db)
     try:
-        resumen(conn)
-        bloque_rentabilidad(conn)
-        desglose(conn, "tipo_senal", "3. DESGLOSE POR TIPO DE SEÑAL", args.ventana, args.minimo)
-        desglose(conn, "activo", "4. DESGLOSE POR ACTIVO", args.ventana, args.minimo)
-        desglose(conn, "regime_state", "5. DESGLOSE POR RÉGIMEN", args.ventana, args.minimo)
-        desglose(conn, "calidad_senal", "6. DESGLOSE POR CALIDAD (legacy)", args.ventana, args.minimo)
-        desglose(conn, "calidad_senal_v2", "7. DESGLOSE POR CALIDAD v2", args.ventana, args.minimo)
+        resumen(conn, args.desde_t0)
+        bloque_rentabilidad(conn, args.desde_t0)
+        desglose(conn, "tipo_senal", "3. DESGLOSE POR TIPO DE SEÑAL", args.ventana, args.minimo, args.desde_t0)
+        desglose(conn, "activo", "4. DESGLOSE POR ACTIVO", args.ventana, args.minimo, args.desde_t0)
+        desglose(conn, "regime_state", "5. DESGLOSE POR RÉGIMEN", args.ventana, args.minimo, args.desde_t0)
+        desglose(conn, "calidad_senal", "6. DESGLOSE POR CALIDAD (legacy)", args.ventana, args.minimo, args.desde_t0)
+        desglose(conn, "calidad_senal_v2", "7. DESGLOSE POR CALIDAD v2", args.ventana, args.minimo, args.desde_t0)
         seccion("FIN DEL ANÁLISIS")
     finally:
         conn.close()
