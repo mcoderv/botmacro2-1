@@ -29,6 +29,7 @@
 | Idioma | Todo en español, **incluidos los mensajes de commit**. |
 | Datasets | Datos de Hyperliquid, 12 activos (6 cripto + 6 TradFi), TZ America/Caracas. |
 | ⛔ | **Sin Docker.** MACRO2.1 corre directo con `python` en Windows. No lo reintroduzcas. |
+| Entrega de archivos | Los archivos van **directo a la carpeta destino** del proyecto (`fixes\`, `analisis\`, etc.). **NO des comandos `copy` desde Descargas.** |
 
 **Formato obligatorio de cada comando que me des:**
 
@@ -94,29 +95,33 @@ PASO N — [qué hace en una línea]
 `ms_v2` (el score multi-timeframe) se agregó en **v7.9.3**. Las señales
 anteriores a esa versión tienen `macro_score_v2 = 0.0` en la DB.
 
-Medición real (2026-10-23, 877 señales resueltas a 24h):
+Medición real (2026-10-23, 877 señales resueltas a 24h). La clave es si el
+`ms_v2` guardado **se explica con los componentes** (`poc + caja + fvg + rs`
++ un `s_mtf` implícito dentro de [-0.65, +0.65]):
 
-| Grupo | n | ms_v2 |
+| Grupo | n | Qué significa |
 |---|---|---|
-| Con score v2 real | **58** (6.6%) | != 0 |
-| Sin score v2 (histórico) | **819** (93.4%) | = 0 |
+| `ms_v2 >= 2` (FUERTE 20 + MODERADA 38) | **58** | Score v2 real y coherente |
+| `ms_v2 < 2` pero coherente | **70** | Coherente (score bajo, o 0 legítimo) |
+| `ms_v2` **incoherente** con los componentes | **749** (85%) | ❌ **No fue computado** |
 
-⚠️ **El 93% en cero es antigüedad, NO un fallback roto.** Es normal y es
-esperado. No lo trates como bug.
+⚠️ **El 85% del histórico no tiene score v2 reconstruible.** No es un fallback
+roto: es antigüedad (v7.9.3 es reciente). No lo trates como bug.
 
-**Consecuencia para medir cosas:** cualquier análisis del v2 tiene que correr
-sobre las 58 señales con score real, NO sobre las 877. Con 58 los cortes por
-etiqueta son de 20-40 señales → **interpretá esos números como ruido
-estadístico, no como resultado.**
+**Consecuencia para medir cosas:** el conjunto de trabajo es de **128 señales
+reconstruibles** (58 + 70), NO 877. Con 128 los cortes por etiqueta quedan en
+20-40 señales → **leelo como ruido estadístico, no como resultado.**
 
 ### 5.2 El re-score de umbral ADF v1 dio FALSOS POSITIVOS
 
-`analisis/rescore_umbral.py` (v1) re-scoreó **también** las señales con
-`ms_v2 = 0`, inventándoles un score. De sus "10 señales que cambian de rama",
-9 son HYPE con `ms_v2 = 0.00` → **falsas**.
+`analisis/rescore_umbral.py` (v1) re-scoreó **todas** las señales, incluidas
+las 749 sin score v2 computado. De sus "10 señales que cambian de rama", 9
+eran HYPE con `ms_v2 = 0.00` → **falsas**.
 
-Antes de usar ese script: tiene que **excluir** las señales con
-`macro_score_v2 == 0` y quedarse solo con las 58 reconstruibles.
+La **v2** (mismo archivo, reescrito) corrige esto: clasifica cada señal en
+reconstruible / no reconstruible, re-scorea **solo** las reconstruibles,
+aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal
+(¿hay señales posteriores a la existencia del v2 sin score? eso sí sería un bug).
 
 ### 5.3 Lo que YA está hecho — no lo rehagas
 
@@ -138,8 +143,10 @@ Antes de usar ese script: tiene que **excluir** las señales con
   `BREAKEVEN_THRESHOLD_PCT = 0.05` solo para el HR. El PF usa `p > 0` / `p < 0`.
   → Cuando se implemente k×σ (ADR 001), **el PF no se va a mover.**
 - **Cero tests.** `verificar.py` es el primer paso, no el final.
-- **La DB no tiene backup fuera del disco.** Es el único recurso del proyecto
-  que no se recupera de GitHub. **Prioridad de backup: alta.**
+- **Backup de la DB:** hecho localmente el 2026-10-23 en
+  `C:\Users\MD\Desktop\MACRO2.1_BACKUP\`. **Falta subirlo a Drive** — hasta
+  entonces sigue siendo un solo disco. Es el único recurso del proyecto que
+  no se recupera de GitHub.
 
 ### 5.5 El régimen de mercado y `ms_v2` no se hablan
 
@@ -180,8 +187,8 @@ Antes de usar ese script: tiene que **excluir** las señales con
 |---|---|
 | `verificar.py` | ⭐ Chequeos de salud del proyecto. Correlo siempre. |
 | `git/guardar.py`, `git/estado.py`, `git/deshacer.py`, `git/revisar_archivo.py` | Scripts de git (no sé git → usá estos) |
-| `fixes/` | Scripts de patch, uno por intervención. Todos con `--deshacer`. |
-| `analisis/` | Scripts de análisis de datos (post-mortem, MAE/MFE, re-score) |
+| `fixes/` | ⭐ `actualizar_gobierno.py` — reescribe AGENTS/ESTADO/HANDOFF/PENDIENTES + ADRs. **Correlo al cierre de cada sesión.** |
+| `analisis/` | Herramientas de análisis vivas: post-mortem, MAE/MFE, `rescore_umbral_v2.py` |
 | `config/CONSOLIDADO/central_params.json` | ⭐ Config real en disco (la que se usa) |
 | `data/vault_v2.1.db` | ⭐ La DB. 907 señales (877 resueltas a 24h). **No tocar, no versionar** |
 

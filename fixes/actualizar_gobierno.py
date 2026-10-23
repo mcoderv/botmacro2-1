@@ -77,6 +77,7 @@ AGENTS_MD = """# AGENTS.md — MACRO2.1 (local, experimental)
 | Idioma | Todo en español, **incluidos los mensajes de commit**. |
 | Datasets | Datos de Hyperliquid, 12 activos (6 cripto + 6 TradFi), TZ America/Caracas. |
 | ⛔ | **Sin Docker.** MACRO2.1 corre directo con `python` en Windows. No lo reintroduzcas. |
+| Entrega de archivos | Los archivos van **directo a la carpeta destino** del proyecto (`fixes\\`, `analisis\\`, etc.). **NO des comandos `copy` desde Descargas.** |
 
 **Formato obligatorio de cada comando que me des:**
 
@@ -142,29 +143,33 @@ PASO N — [qué hace en una línea]
 `ms_v2` (el score multi-timeframe) se agregó en **v7.9.3**. Las señales
 anteriores a esa versión tienen `macro_score_v2 = 0.0` en la DB.
 
-Medición real (2026-10-23, 877 señales resueltas a 24h):
+Medición real (2026-10-23, 877 señales resueltas a 24h). La clave es si el
+`ms_v2` guardado **se explica con los componentes** (`poc + caja + fvg + rs`
++ un `s_mtf` implícito dentro de [-0.65, +0.65]):
 
-| Grupo | n | ms_v2 |
+| Grupo | n | Qué significa |
 |---|---|---|
-| Con score v2 real | **58** (6.6%) | != 0 |
-| Sin score v2 (histórico) | **819** (93.4%) | = 0 |
+| `ms_v2 >= 2` (FUERTE 20 + MODERADA 38) | **58** | Score v2 real y coherente |
+| `ms_v2 < 2` pero coherente | **70** | Coherente (score bajo, o 0 legítimo) |
+| `ms_v2` **incoherente** con los componentes | **749** (85%) | ❌ **No fue computado** |
 
-⚠️ **El 93% en cero es antigüedad, NO un fallback roto.** Es normal y es
-esperado. No lo trates como bug.
+⚠️ **El 85% del histórico no tiene score v2 reconstruible.** No es un fallback
+roto: es antigüedad (v7.9.3 es reciente). No lo trates como bug.
 
-**Consecuencia para medir cosas:** cualquier análisis del v2 tiene que correr
-sobre las 58 señales con score real, NO sobre las 877. Con 58 los cortes por
-etiqueta son de 20-40 señales → **interpretá esos números como ruido
-estadístico, no como resultado.**
+**Consecuencia para medir cosas:** el conjunto de trabajo es de **128 señales
+reconstruibles** (58 + 70), NO 877. Con 128 los cortes por etiqueta quedan en
+20-40 señales → **leelo como ruido estadístico, no como resultado.**
 
 ### 5.2 El re-score de umbral ADF v1 dio FALSOS POSITIVOS
 
-`analisis/rescore_umbral.py` (v1) re-scoreó **también** las señales con
-`ms_v2 = 0`, inventándoles un score. De sus "10 señales que cambian de rama",
-9 son HYPE con `ms_v2 = 0.00` → **falsas**.
+`analisis/rescore_umbral.py` (v1) re-scoreó **todas** las señales, incluidas
+las 749 sin score v2 computado. De sus "10 señales que cambian de rama", 9
+eran HYPE con `ms_v2 = 0.00` → **falsas**.
 
-Antes de usar ese script: tiene que **excluir** las señales con
-`macro_score_v2 == 0` y quedarse solo con las 58 reconstruibles.
+La **v2** (mismo archivo, reescrito) corrige esto: clasifica cada señal en
+reconstruible / no reconstruible, re-scorea **solo** las reconstruibles,
+aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal
+(¿hay señales posteriores a la existencia del v2 sin score? eso sí sería un bug).
 
 ### 5.3 Lo que YA está hecho — no lo rehagas
 
@@ -186,8 +191,10 @@ Antes de usar ese script: tiene que **excluir** las señales con
   `BREAKEVEN_THRESHOLD_PCT = 0.05` solo para el HR. El PF usa `p > 0` / `p < 0`.
   → Cuando se implemente k×σ (ADR 001), **el PF no se va a mover.**
 - **Cero tests.** `verificar.py` es el primer paso, no el final.
-- **La DB no tiene backup fuera del disco.** Es el único recurso del proyecto
-  que no se recupera de GitHub. **Prioridad de backup: alta.**
+- **Backup de la DB:** hecho localmente el 2026-10-23 en
+  `C:\\Users\\MD\\Desktop\\MACRO2.1_BACKUP\\`. **Falta subirlo a Drive** — hasta
+  entonces sigue siendo un solo disco. Es el único recurso del proyecto que
+  no se recupera de GitHub.
 
 ### 5.5 El régimen de mercado y `ms_v2` no se hablan
 
@@ -228,8 +235,8 @@ Antes de usar ese script: tiene que **excluir** las señales con
 |---|---|
 | `verificar.py` | ⭐ Chequeos de salud del proyecto. Correlo siempre. |
 | `git/guardar.py`, `git/estado.py`, `git/deshacer.py`, `git/revisar_archivo.py` | Scripts de git (no sé git → usá estos) |
-| `fixes/` | Scripts de patch, uno por intervención. Todos con `--deshacer`. |
-| `analisis/` | Scripts de análisis de datos (post-mortem, MAE/MFE, re-score) |
+| `fixes/` | ⭐ `actualizar_gobierno.py` — reescribe AGENTS/ESTADO/HANDOFF/PENDIENTES + ADRs. **Correlo al cierre de cada sesión.** |
+| `analisis/` | Herramientas de análisis vivas: post-mortem, MAE/MFE, `rescore_umbral_v2.py` |
 | `config/CONSOLIDADO/central_params.json` | ⭐ Config real en disco (la que se usa) |
 | `data/vault_v2.1.db` | ⭐ La DB. 907 señales (877 resueltas a 24h). **No tocar, no versionar** |
 
@@ -356,7 +363,7 @@ No lo arregla el k×σ (el PF no depende del break-even).
 
 | # | Riesgo | Impacto | Estado |
 |---|---|---|---|
-| **H-7a** | **DB sin backup fuera del disco** | Se pierde 10 meses de evidencia y no se recupera de GitHub | 🔴 **PENDIENTE — resolver YA** |
+| **H-7a** | **Backup de la DB solo en un disco** | Hecho local (`Desktop\\MACRO2.1_BACKUP\\`), falta Drive | 🟡 **Falta subirlo a Drive** |
 | **H-7b** | 5 imports con fallback silencioso | Una regresión se degrupa sin avisar | 🟡 Pendiente → matar fallbacks |
 | **H-2** | Dos ADF distintos (niveles en C3_5 vs residuales FFD en C3_MACRO) | El régimen no mueve el conmutador de `ms_v2` | 🟡 Pendiente de decisión |
 | **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo | Sesga HR (no el PF). Trivial en BTC, excesivo en EUR | 🟡 Pendiente → ADR 001 |
@@ -370,9 +377,9 @@ No lo arregla el k×σ (el PF no depende del break-even).
 
 ## ⏰ ANTES DE CUALQUIER COSA
 
-**Hacé el backup externo de `data\\vault_v2.1.db` y `.env`** (a Drive, disco
-externo o donde sea). Es lo único del proyecto que **no** se recupera de
-GitHub. 907 señales = 10 meses de evidencia.
+**Subí `C:\\Users\\MD\\Desktop\\MACRO2.1_BACKUP\\` a Drive.** El backup local ya
+está hecho (23/10): `vault_v2.1.db` (907 señales) + `env_respaldo.txt`.
+Es lo único del proyecto que **no** se recupera de GitHub.
 
 ---
 
@@ -382,9 +389,10 @@ GitHub. 907 señales = 10 meses de evidencia.
 
 - La v1 re-scoreó señales con `ms_v2 = 0` (placeholder) → dio falsos positivos
   (9 de los 10 "cambios" eran HYPE con `ms_v2 = 0.00`).
-- La v2 tiene que: (a) **excluir** las señales con `macro_score_v2 == 0`,
-  (b) quedarse solo con las **58** que tienen score real, (c) reportar
-  auto-validación y cobertura.
+- La v2 tiene que: (a) clasificar cada señal en **reconstruible / no
+  reconstruible** (auto-validación 2), (b) re-scorear **solo** las
+  reconstruibles (**128 de 877**), (c) abortar si la auto-validación 1 no da
+  ≥90%, (d) reportar el corte temporal (señales post-v2 sin score = bug real).
 - **Con 58 señales los cortes por etiqueta son de 20-40 → ruido estadístico.**
   El objetivo NO es "demostrar que el umbral 0.05 mejora el HR" (no lo va a
   hacer: el HR y el PF no cambian con el umbral). El objetivo es **cuantificar
@@ -464,10 +472,11 @@ Commit   : 5e0c481
 
 ## 3. Qué creo que está frágil (opinión sin filtros)
 
-1. **El 93% de las señales tiene `ms_v2 = 0` — y NO es un bug.** `ms_v2` se
-   agregó en v7.9.3; lo anterior quedó en 0. De 877 señales, solo **58** (6.6%)
-   tienen score v2 real. Cualquier estadística del v2 sobre 877 es basura:
-   hay que correrla sobre 58 y **leerla como ruido estadístico**.
+1. **El 85% de las señales NO tiene score v2 reconstruible — y NO es un bug.**
+   `ms_v2` se agregó en v7.9.3 (reciente); lo anterior quedó en 0. De 877
+   señales: **58** con `ms_v2 >= 2`, **70** con score bajo pero coherente,
+   **749 incoherentes** (no computadas). El grupo de trabajo real es de
+   **128 señales**. Cualquier estadística del v2 sobre 877 es basura.
 
 2. **El re-score v1 dio falsos positivos.** Re-scoreó las señales con
    `ms_v2 = 0` como si tuvieran un score. De sus "10 que cambian de rama", 9
@@ -600,7 +609,10 @@ PENDIENTES_MD = """# PENDIENTES — MACRO2.1
 
 ### 7. `rescore_umbral.py` v2
 - La v1 re-scoreó placeholders (`ms_v2 = 0`) → falsos positivos.
-- La v2 tiene que excluir `macro_score_v2 == 0` y trabajar sobre las **58** señales reales.
+- La v2 tiene que clasificar cada señal en **reconstruible / no reconstruible**
+  (auto-validación 2) y re-scorear **solo las 128 reconstruibles** de 877.
+- Debe abortar si la auto-validación 1 no da ≥90%, y reportar el corte temporal
+  (¿hay señales posteriores a la existencia del v2 sin score? eso sí sería un bug).
 - Ver `AGENTS.md` §5.1 y §5.2.
 
 ---
@@ -609,8 +621,8 @@ PENDIENTES_MD = """# PENDIENTES — MACRO2.1
 
 - **Eliminar los cripto del universo** → descartado. Se mantienen los 12.
 - **Filtro v2 con pocas señales** → se resuelve con acumulación de datos. Ojo:
-  solo 58 señales tienen `ms_v2` real, y 20 de ellas son FUERTE. Con 20 señales
-  cualquier comparación de HR es ruido.
+  solo 128 señales son reconstruibles (58 con `ms_v2 >= 2`, de las cuales 20 son
+  FUERTE). Con 20 señales cualquier comparación de HR es ruido.
 - **MACRO2 (producción en Render)** → **DATA FREEZE**. Ninguna corrección de
   esta lista se toca ahí hasta que se valide en MACRO2.1.
 

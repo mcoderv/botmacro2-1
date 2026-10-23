@@ -63,7 +63,10 @@
 
 ### 7. `rescore_umbral.py` v2
 - La v1 re-scoreó placeholders (`ms_v2 = 0`) → falsos positivos.
-- La v2 tiene que excluir `macro_score_v2 == 0` y trabajar sobre las **58** señales reales.
+- La v2 tiene que clasificar cada señal en **reconstruible / no reconstruible**
+  (auto-validación 2) y re-scorear **solo las 128 reconstruibles** de 877.
+- Debe abortar si la auto-validación 1 no da ≥90%, y reportar el corte temporal
+  (¿hay señales posteriores a la existencia del v2 sin score? eso sí sería un bug).
 - Ver `AGENTS.md` §5.1 y §5.2.
 
 ---
@@ -72,8 +75,8 @@
 
 - **Eliminar los cripto del universo** → descartado. Se mantienen los 12.
 - **Filtro v2 con pocas señales** → se resuelve con acumulación de datos. Ojo:
-  solo 58 señales tienen `ms_v2` real, y 20 de ellas son FUERTE. Con 20 señales
-  cualquier comparación de HR es ruido.
+  solo 128 señales son reconstruibles (58 con `ms_v2 >= 2`, de las cuales 20 son
+  FUERTE). Con 20 señales cualquier comparación de HR es ruido.
 - **MACRO2 (producción en Render)** → **DATA FREEZE**. Ninguna corrección de
   esta lista se toca ahí hasta que se valide en MACRO2.1.
 

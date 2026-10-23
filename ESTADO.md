@@ -51,7 +51,7 @@ No lo arregla el k×σ (el PF no depende del break-even).
 
 | # | Riesgo | Impacto | Estado |
 |---|---|---|---|
-| **H-7a** | **DB sin backup fuera del disco** | Se pierde 10 meses de evidencia y no se recupera de GitHub | 🔴 **PENDIENTE — resolver YA** |
+| **H-7a** | **Backup de la DB solo en un disco** | Hecho local (`Desktop\MACRO2.1_BACKUP\`), falta Drive | 🟡 **Falta subirlo a Drive** |
 | **H-7b** | 5 imports con fallback silencioso | Una regresión se degrupa sin avisar | 🟡 Pendiente → matar fallbacks |
 | **H-2** | Dos ADF distintos (niveles en C3_5 vs residuales FFD en C3_MACRO) | El régimen no mueve el conmutador de `ms_v2` | 🟡 Pendiente de decisión |
 | **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo | Sesga HR (no el PF). Trivial en BTC, excesivo en EUR | 🟡 Pendiente → ADR 001 |
@@ -65,9 +65,9 @@ No lo arregla el k×σ (el PF no depende del break-even).
 
 ## ⏰ ANTES DE CUALQUIER COSA
 
-**Hacé el backup externo de `data\vault_v2.1.db` y `.env`** (a Drive, disco
-externo o donde sea). Es lo único del proyecto que **no** se recupera de
-GitHub. 907 señales = 10 meses de evidencia.
+**Subí `C:\Users\MD\Desktop\MACRO2.1_BACKUP\` a Drive.** El backup local ya
+está hecho (23/10): `vault_v2.1.db` (907 señales) + `env_respaldo.txt`.
+Es lo único del proyecto que **no** se recupera de GitHub.
 
 ---
 
@@ -77,9 +77,10 @@ GitHub. 907 señales = 10 meses de evidencia.
 
 - La v1 re-scoreó señales con `ms_v2 = 0` (placeholder) → dio falsos positivos
   (9 de los 10 "cambios" eran HYPE con `ms_v2 = 0.00`).
-- La v2 tiene que: (a) **excluir** las señales con `macro_score_v2 == 0`,
-  (b) quedarse solo con las **58** que tienen score real, (c) reportar
-  auto-validación y cobertura.
+- La v2 tiene que: (a) clasificar cada señal en **reconstruible / no
+  reconstruible** (auto-validación 2), (b) re-scorear **solo** las
+  reconstruibles (**128 de 877**), (c) abortar si la auto-validación 1 no da
+  ≥90%, (d) reportar el corte temporal (señales post-v2 sin score = bug real).
 - **Con 58 señales los cortes por etiqueta son de 20-40 → ruido estadístico.**
   El objetivo NO es "demostrar que el umbral 0.05 mejora el HR" (no lo va a
   hacer: el HR y el PF no cambian con el umbral). El objetivo es **cuantificar

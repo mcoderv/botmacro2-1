@@ -55,10 +55,11 @@ Commit   : 5e0c481
 
 ## 3. Qué creo que está frágil (opinión sin filtros)
 
-1. **El 93% de las señales tiene `ms_v2 = 0` — y NO es un bug.** `ms_v2` se
-   agregó en v7.9.3; lo anterior quedó en 0. De 877 señales, solo **58** (6.6%)
-   tienen score v2 real. Cualquier estadística del v2 sobre 877 es basura:
-   hay que correrla sobre 58 y **leerla como ruido estadístico**.
+1. **El 85% de las señales NO tiene score v2 reconstruible — y NO es un bug.**
+   `ms_v2` se agregó en v7.9.3 (reciente); lo anterior quedó en 0. De 877
+   señales: **58** con `ms_v2 >= 2`, **70** con score bajo pero coherente,
+   **749 incoherentes** (no computadas). El grupo de trabajo real es de
+   **128 señales**. Cualquier estadística del v2 sobre 877 es basura.
 
 2. **El re-score v1 dio falsos positivos.** Re-scoreó las señales con
    `ms_v2 = 0` como si tuvieran un score. De sus "10 que cambian de rama", 9

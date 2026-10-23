@@ -366,6 +366,8 @@ def check_docs():
         ("decisiones/001-umbral-dinamico-volatilidad-PENDIENTE.md", "ADR 001 (umbral dinamico)"),
         ("decisiones/002-unificar-umbral-ADF.md", "ADR 002 (umbral ADF, con .md)"),
         ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
+        ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
+        ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
     ]
     faltan = [d for d, _ in adrs if not (RAIZ / d).exists()]
     if faltan:
