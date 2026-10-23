@@ -46,3 +46,4 @@ docs/**/*.zip
 *.bak 
 # --- docs/local: soporte personal, NO se sube a GitHub ---
 docs/local/
+fixes/_bak_gobierno/ 
