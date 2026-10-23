@@ -227,6 +227,11 @@ CENTRAL_PARAMS: Dict[str, Any] = {
         "BIAS_THRESHOLD": 0.60,
         "MARKOV_ACTIVADO": True,
         "ALL_ASSETS": list(MACRO_ALL_ASSETS),
+        # ADR 002: fuente UNICA de verdad del umbral ADF.
+        # La leen C3_MACRO (via _get_macro_param) y C3_5 (via _get_adf_threshold).
+        # Antes vivia en "validation" con 0.02, mientras C3_5 usaba 0.05 fijo:
+        # el motor de regimen y el score se contradecian en silencio (bug H-1).
+        "ADF_P_VALUE_THRESHOLD": 0.05,
     },
 
     # ── BACKUP ──
@@ -250,7 +255,7 @@ CENTRAL_PARAMS: Dict[str, Any] = {
     "validation": {
         "FFD_WALKFORWARD": True,
         "FFD_IN_SAMPLE_WARNING": True,
-        "ADF_P_VALUE_THRESHOLD": 0.02,
+        # "ADF_P_VALUE_THRESHOLD" se movio a la seccion "macro" (ADR 002).
         "MIN_TRADES_FOR_WALKFORWARD": 100,
         "PURGED_EMBARGO": True,
     },
@@ -721,6 +726,14 @@ def _migrar_v28(verbose: bool = True) -> int:
         macro_sec["ALL_ASSETS"] = list(MACRO_ALL_ASSETS)
         cambios += 1
 
+    # ADR 002: el umbral ADF vive en "macro" y SE SOBREESCRIBE siempre.
+    # Antes vivia en "validation" y la migracion solo hacia setdefault, asi que
+    # un central_params.json ya guardado seguia con el 0.02 viejo para siempre.
+    _ADF_ESPERADO = 0.05
+    if macro_sec.get("ADF_P_VALUE_THRESHOLD") != _ADF_ESPERADO:
+        macro_sec["ADF_P_VALUE_THRESHOLD"] = _ADF_ESPERADO
+        cambios += 1
+
     # system.WATCHLIST / radar.WATCHLIST
     system_sec = CENTRAL_PARAMS.setdefault("system", {})
     if not isinstance(system_sec, dict):
@@ -774,7 +787,6 @@ def _migrar_v28(verbose: bool = True) -> int:
     val_defaults: Dict[str, Any] = {
         "FFD_WALKFORWARD": True,
         "FFD_IN_SAMPLE_WARNING": True,
-        "ADF_P_VALUE_THRESHOLD": 0.02,
         "MIN_TRADES_FOR_WALKFORWARD": 100,
         "PURGED_EMBARGO": True,
     }
@@ -783,6 +795,12 @@ def _migrar_v28(verbose: bool = True) -> int:
         if k not in val_sec:
             val_sec[k] = v
             cambios += 1
+
+    # ADR 002: sacar ADF_P_VALUE_THRESHOLD de "validation".
+    # Vive SOLO en "macro", para que haya una unica fuente de verdad.
+    if "ADF_P_VALUE_THRESHOLD" in val_sec:
+        val_sec.pop("ADF_P_VALUE_THRESHOLD")
+        cambios += 1
 
     # copiloto.WATCHLIST_PANEL
     cop_sec = CENTRAL_PARAMS.setdefault("copiloto", {})

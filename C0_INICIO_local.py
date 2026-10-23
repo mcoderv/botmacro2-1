@@ -19,8 +19,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 # En Windows no montamos Drive: usamos una carpeta local para "backups" y otra para "logs"
-BACKUP_DIR = PROJECT_ROOT / "backups"
-LOGS_DIR   = PROJECT_ROOT / "logs"
+# ADR 002 / fix H-3: mismas carpetas que usa C1_CONFIG (y por lo tanto C2_BOVEDA).
+# Antes C0 escribia en "backups"/"logs" y C2 leia de "backups_v2.1"/"logs_v2.1",
+# con lo que el auto-restore NUNCA encontraba los backups.
+BACKUP_DIR = PROJECT_ROOT / "backups_v2.1"
+LOGS_DIR   = PROJECT_ROOT / "logs_v2.1"
 
 # Mensaje equivalente al montaje de Drive, pero local
 print("🖥️  Entorno local detectado (Windows + VS Code). No se monta Google Drive.")

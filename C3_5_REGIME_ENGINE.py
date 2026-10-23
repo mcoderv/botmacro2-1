@@ -70,7 +70,22 @@ LOOKBACK_DAYS_TRADFI: int = 60
 MIN_CANDLES: int = 30
 
 # v2.0: Parámetros ADF
-ADF_P_VALUE_THRESHOLD: float = 0.05  # Estándar econométrico (no 0.02)
+# ADR 002: el umbral se lee de CENTRAL_PARAMS["macro"] (fuente unica de verdad).
+# Antes estaba fijo en 0.05 aca, mientras C3_MACRO usaba 0.02 -> contradiccion
+# silenciosa entre el motor de regimen y el score (bug H-1).
+def _get_adf_threshold() -> float:
+    """Lee ADF_P_VALUE_THRESHOLD desde CENTRAL_PARAMS['macro']."""
+    _cp = globals().get("CENTRAL_PARAMS", {}) or {}
+    _macro = _cp.get("macro", {}) if isinstance(_cp, dict) else {}
+    if isinstance(_macro, dict):
+        try:
+            return float(_macro.get("ADF_P_VALUE_THRESHOLD", 0.05))
+        except (TypeError, ValueError):
+            pass
+    return 0.05
+
+
+ADF_P_VALUE_THRESHOLD: float = _get_adf_threshold()
 TREND_SLOPE_THRESHOLD: float = 0.0012  # Pendiente mínima OLS para tendencia
 CHAOS_VOL_THRESHOLD: float = 1.75  # Ratio volatilidad para caos
 

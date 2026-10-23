@@ -38,3 +38,8 @@ carp.txt
 
 # --- ARCHIVOS LOCALES DE WINDOWS ---
 verificar_progreso.bat
+
+# --- agregado por aplicar_fixes.py ---
+docs/**/*.zip
+*.bak 
+!config/CONSOLIDADO/central_params.json
