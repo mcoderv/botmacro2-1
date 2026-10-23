@@ -1384,9 +1384,9 @@ def calcular_rvd_suavizado(df_5m: Optional[pd.DataFrame]) -> Tuple[float, pd.Ser
     except _C3_EXC:
         return 0.0, pd.Series(dtype=float)
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
 # 14. ZONAS DE LIQUIDEZ 5M
-# ─────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
 async def fetch_liquidity_zones(
     session: aiohttp.ClientSession,
     coin: str,
@@ -1486,9 +1486,16 @@ async def fetch_liquidity_zones(
         rvd, _ = calcular_rvd_suavizado(df)
         rs = 2 if rvd > 0.3 else (1 if rvd > 0.1 else (-2 if rvd < -0.3 else (-1 if rvd < -0.1 else 0)))
         
+        # ── [INTERVENCIÓN I-1: AMPLIFICACIÓN SIMÉTRICA DE CAJA] ──
+        # El amplificador 'am' ahora puede ir de 0.5 a 2.0 (antes solo llegaba a 1.0).
+        # Esto permite que caja_p alcance {-2, -1, 0, 1, 2} de forma simétrica.
+        # Cuando el volumen es alto, la señal de posición en la caja se amplifica.
+        # Cuando el volumen es bajo, se atenúa (pero no se anula).
         va = float(df["v"].iloc[-1])
-        am = min(1.0, va / (ATR_RUPTURA_MULT * atr)) if atr > 0 else 1.0
-        caja_p = int(round(caja * am))
+        am = min(2.0, max(0.5, va / (ATR_RUPTURA_MULT * atr))) if atr > 0 else 1.0
+        caja_p = max(-2, min(2, int(round(caja * am))))
+        
+        # ── [FIN INTERVENCIÓN I-1] ──
         
         ms = poc_score + caja_p + fvg + rs
         

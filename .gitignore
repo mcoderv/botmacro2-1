@@ -19,6 +19,9 @@ logs/
 reportes/
 exports/
 textos/
+logs_v2.1/
+backups_v2.1/
+data/
 
 # --- ARCHIVOS TEMPORALES DE SQLITE ---
 *.db-wal

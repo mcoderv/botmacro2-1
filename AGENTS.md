@@ -1,72 +1,97 @@
-# AGENTS.md — Reglas del agente en MACRO2
-Se carga automáticamente al iniciar sesión en Cline. Es LEY.
-Si una instrucción del usuario entra en conflicto, gana el usuario.
-Si una acción propuesta entra en conflicto, gana este archivo.
+# AGENTS.md — MACRO2.1 (local)
 
-## 0. Filosofía (LO MÁS IMPORTANTE)
-- Eres asistente, no generador automático de código.
-- Espera "ok, créalo" antes de cualquier write/edit.
-- No produzcas código no pedido. Si preguntan "¿qué hace C3?", describe. No reescribas.
-- No expliques más de lo pedido. Responde lo preguntado, punto. Párrafos cortos. Si puedes decir en 1 línea, no digas 5.
-- No ofrezcas features extras. Si no se pidió una mejora, no la ofrezcas. Cuesta tokens.
-- No asumas contexto. Lee `ESTADO.md` y `docs/` antes de inventar.
-- Una pregunta a la vez, máximo 5 por turno, opción múltiple cuando sea posible.
-- No te auto-celebres ("¡Buena pregunta!", "¡Excelente!"). No des rodeos.
-- **PROHIBIDO ALUCINAR CONCEPTOS DE DOMINIO**: Si te preguntan sobre trading, estadística, infraestructura, APIs, o cualquier concepto técnico y NO está en los `.md` del proyecto, DEBES decir: "No lo sé, hay que investigarlo" y proponer un plan de investigación estructurado con subtemas. Solo investiga asuntos profundos/críticos para el proyecto, no cada detalle menor.
+## CONTACTO
+Soy vibe coder. No sé código. Hablame en español, sin jerga.
+NO edites archivos sin mi "ok, crealo" explícito.
 
-## 1. Proyecto
-- **Nombre**: MACRO2 (mercabot_qwen)
-- **Tipo**: bot de trading multi-activo con validación estadística
-- **Estado actual** (fase, freeze, métricas, próximo objetivo): ver `ESTADO.md`
-- **Metodología**: `docs/spec-ms-v2.md`
-- **Stack**: `decisiones/000-render-litestream-r2.md`
+## VERDAD ACTUAL
+→ Leé ESTADO.md (dónde estoy) y decisiones/ (por qué). Son la fuente.
+→ Para saber qué hace cada archivo: tabla abajo.
 
-## 2. Regla dura: DATA FREEZE
-- NO modificar el código del bot durante el freeze. Cero excepciones salvo bug fix que NO cambie la lógica del score.
-- **Archivos congelados**:
-  - `C0_INICIO_local.py`
-  - `C1_CONFIG_local.py`
-  - `C1_5_PARAM_local.py`
-  - `C2_BOVEDA_local.py`
-  - `C2_5_CONTEXTO_local.py`
-  - `C3_MACRO_local.py`
-  - `C3_DATA_QUALITY.py`
-  - `C3_5_REGIME_ENGINE.py`
-  - `C4_SENIAL_VALIDATOR.py`
-  - `main.py`
-- **Lo que SÍ se puede hacer**: Preguntas, lectura, queries SQL read-only, reportes agregados.
+## REGLAS DURAS
+1. Una celda por sesión. Un cambio por vez.
+2. Si algo funciona, NO lo toques sin un ADR que lo justifique.
+3. Import que falla → que se rompa. Prohibido degradar en silencio.
+4. Un parámetro, UNA ruta de acceso. Si lo cambiás, cambiás su
+   definición y verificás que TODOS los consumidores lo lean de ahí.
+5. Tras cada cambio: corré `python verificar.py` y pegá la salida.
+   Si falla, NO avances.
+6. Nunca toques data/ ni la DB.
 
-## 3. Referencias obligatorias (antes de proponer algo)
-1. `ESTADO.md` — estado actual, próximo objetivo.
-2. `decisiones/` — qué se decidió y por qué.
-3. `docs/spec-ms-v2.md` — metodología.
-4. `docs/data-lineage.md` — de dónde vienen los datos.
-- Si la propuesta contradice algo de estos, no la hagas. Pregunta.
+## MAPA (1 línea por archivo)
+C0_INICIO   → setup, deps, dirs
+C1_CONFIG   → rutas, DB, TZ, límites de portfolio
+C1_5_PARAM  → CENTRAL_PARAMS (fuente de verdad) + presets
+C2_BOVEDA   → SQLite: 18 tablas, backup, liveness
+C2_5        → liquidez: ATR, wicks, fractales, OBI
+C3_DQ       → calidad de datos (CLOSED/FORMING/STALE)
+C3_MACRO    → cartógrafo v7.9.3, ms_v2, p_magnet
+C3_5        → régimen ADF (TREND/RANGE/CHAOS)
+C4          → registra señales, resuelve PnL 4/8/24h
 
-## 4. Stack (resumen)
-- Python 3.12, SQLite schema-less.
-- Render Free + Cloudflare R2 (Litestream) + UptimeRobot.
-- Telegram notificaciones.
-- **NO cambiar a Postgres, Docker compose, otros cloud, sin ADR nuevo.**
-- Detalle: `decisiones/000-render-litestream-r2.md`.
+## TABLA DE UMBRALES (fuente única de verdad)
+| Parámetro | Valor | Quién lo lee | Dónde se define |
+|---|---|---|---|
+| ADF_P_VALUE_THRESHOLD | 0.05 | C3_5, C3_MACRO | CENTRAL_PARAMS["macro"] |
+| STRONG_BIAS_THRESHOLD | 2 | C3_MACRO | CENTRAL_PARAMS["macro"] |
+| BREAK_THRESHOLD_PCT | 0.05 | C4 | C4 (hardcoded) |
+| RESOLUTION_WINDOWS_HOURS | 4,8,24 | C4 | C4 (hardcoded) |
 
-## 5. Shell (Windows + cmd)
-- El usuario usa Windows + cmd, NO PowerShell.
-- `&` para encadenar, NO `&&`.
-- `mkdir a b c` para varias carpetas.
-- Venv: `.venv\Scripts\activate.bat`.
+## CONGELADO (no tocar sin ADR)
+- data/vault_v2.1.db → 845 señales, 10 meses de validación
+- C3_DATA_QUALITY.py → validado, 3 consumidores
 
-## 6. Lo que el agente NO debe hacer (chequeo rápido)
-❌ Escribir código sin "ok, créalo" explícito.
-❌ Reescribir archivos sin pedirlos.
-❌ Explicar conceptos básicos no preguntados.
-❌ Ofrecer features, refactors o mejoras no pedidas.
-❌ Inventar tablas, columnas, funciones, archivos que no existen.
-❌ Hacer web searches innecesarias.
-❌ Dar formato bonito a respuestas cortas.
-❌ Sugerir tests automáticamente.
-❌ Auto-celebrarse.
-❌ **ALUCINAR conceptos de dominio** (trading, estadística, infraestructura, APIs). Si no está en los `.md`, di "No lo sé, hay que investigarlo" y propone un plan de investigación con subtemas (solo para asuntos profundos/críticos).
+## RITUAL GIT (obligatorio, cada sesión)
 
-## 7. Resumen en 1 línea
-Pregunta, espera confirmación, ejecuta lo mínimo, gasta lo menos posible, y NUNCA inventes conceptos técnicos.
+Yo NO sé usar git. Por eso, vos NUNCA me decís "guardá los cambios" ni
+"revisá el estado". Me dáis el comando LITERAL, numerado, con el output
+esperado.
+
+FORMATO OBLIGATORIO de cada comando que me des:
+
+    PASO N — [qué hace este paso en una línea]
+
+        <comando literal, listo para copiar>
+
+    ✅ Deberías ver: [output esperado, literal]
+    ❌ Si falla: [qué significa + qué copio yo para que me ayudes]
+    📂 Desde: [carpeta exacta desde donde corro]
+
+REGLAS:
+- UN paso a la vez. No me des 3 comandos juntos.
+- SIEMPRE con output esperado. Yo no sé leer errores, necesito ver
+  si salió bien.
+- SIEMPRE terminá preguntándome: "¿lo corriste? pegá la salida".
+- Si algo falló, NO me des el siguiente paso hasta ver la salida.
+- NUNCA me digas "investiguá en git" ni "hacé un diff". Yo no sé.
+
+ORDEN DE CADA SESIÓN (si me pides trabajar en código):
+
+  1. INICIO:
+     → Ejecutá: python git/estado.py
+     → Decime en una línea: dónde estamos y cuál es el próximo paso.
+
+  2. ANTES de pegarme código nuevo (checkpoint):
+     → Ejecutá: python git/guardar.py "antes de: <qué me pediste>"
+     → Avisame si salió "No hay cambios" (significa que ya está guardado).
+
+  3. DESPUÉS de que yo pegue código (ANTES de ejecutar nada):
+     → Ejecutá: python git/revisar_archivo.py <archivo>
+     → Si da ❌ SINTAXIS ROTA → el paste quedó cortado. Decime
+       "repetí el archivo desde la línea X" y NO avances.
+
+  4. DESPUÉS de que todo funcione:
+     → Ejecutá: python git/guardar.py "<qué cambió, en una frase>"
+
+  5. SI ALGO SE ROMPIÓ:
+     → Ejecutá: python git/deshacer.py
+     → (me pide confirmación escribiendo SI)
+
+INVESTIGACIÓN Y RESPUESTAS:
+- Cuando me des una respuesta de investigación que valga guardar,
+  pedime guardarla en notas/AAAA-MM-DD-titulo.md
+- NUNCA tires una respuesta larga solo en el chat. Ofrecé el archivo.
+
+DESCARGAS:
+- Cuando bajes un archivo, que caiga en tmp/ y que lo verifique
+  antes de moverlo a su lugar.

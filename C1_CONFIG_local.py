@@ -27,15 +27,15 @@ PROJECT_ROOT = _resolve_project_root()
 
 DATA_DIR    = PROJECT_ROOT / "data"
 CONFIG_DIR  = PROJECT_ROOT / "config"
-BACKUP_DIR  = PROJECT_ROOT / "backups"
-LOGS_DIR    = PROJECT_ROOT / "logs"
+BACKUP_DIR  = PROJECT_ROOT / "backups_v2.1"
+LOGS_DIR    = PROJECT_ROOT / "logs_v2.1"
 EXPORTS_DIR = PROJECT_ROOT / "exports"
 
 for _d in (DATA_DIR, CONFIG_DIR, BACKUP_DIR, LOGS_DIR, EXPORTS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # DB_FILE: ruta absoluta local (en Colab era "vault_v2.db" como nombre suelto)
-DB_FILE = str(DATA_DIR / "vault_v2.db")
+DB_FILE = str(DATA_DIR / "vault_v2.1.db")
 
 # ── 1. DETECCIÓN DE ENTORNO Y MODO ──
 #    Colab: userdata.get('GEM5_MODO_CAPTURA','true') → ya no existe.

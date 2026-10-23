@@ -1,12 +1,14 @@
 # ==============================================================================
-# 🦅 mercabot_qwen | CELDA 3.5: MOTOR DE RÉGIMEN v1.5 (RATE LIMIT RESILIENT)
+# 🦅 mercabot_qwen | CELDA 3.5: MOTOR DE RÉGIMEN v2.0 (ADF REAL)
 # ------------------------------------------------------------------------------
-# v1.5: Manejo robusto de HTTP 429 (Rate Limiting)
-#   - Retry con backoff exponencial: 2s → 4s → 8s (máx 3 intentos)
-#   - Delay inicial entre requests: 0.5s para ser respetuoso con la API
-#   - Logging explícito de rate limiting y reintentos
-#   - Mantiene toda la lógica estadística completa (FFD, autocorrelación, etc.)
+# v2.0: Implementación de test ADF real sobre precios logarítmicos
+#   - Test ADF con statsmodels.tsa.stattools.adfuller
+#   - Insumo: precios logarítmicos en niveles (NO retornos)
+#   - Umbral: 0.05 (estándar econométrico)
+#   - Complementado con pendiente OLS y ratio de volatilidad
+#   - Heurística anterior como fallback solo si ADF falla
 #
+# v1.5: Manejo robusto de HTTP 429 (Rate Limiting)
 # Dependencias: C0-C3 ejecutadas previamente.
 # ==============================================================================
 from __future__ import annotations
@@ -22,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import aiohttp
 import numpy as np
 import pandas as pd
+from statsmodels.tsa.stattools import adfuller
 
 logger = logging.getLogger("mercabot_qwen")
 
@@ -66,38 +69,145 @@ LOOKBACK_DAYS_CRYPTO: int = 30
 LOOKBACK_DAYS_TRADFI: int = 60
 MIN_CANDLES: int = 30
 
+# v2.0: Parámetros ADF
+ADF_P_VALUE_THRESHOLD: float = 0.05  # Estándar econométrico (no 0.02)
+TREND_SLOPE_THRESHOLD: float = 0.0012  # Pendiente mínima OLS para tendencia
+CHAOS_VOL_THRESHOLD: float = 1.75  # Ratio volatilidad para caos
+
 # v1.5: Configuración de retry para rate limiting
 MAX_RETRIES: int = 3
 INITIAL_BACKOFF: float = 2.0  # segundos
 REQUEST_DELAY: float = 0.5    # delay entre requests
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 3. CÁLCULO DE FEATURES (Completo)
+# 3. CLASIFICACIÓN DE RÉGIMEN CON ADF (v2.0)
 # ──────────────────────────────────────────────────────────────────────────────
-def _frac_diff_ffd(series: np.ndarray, d: float = 0.4, threshold: float = 1e-3) -> np.ndarray:
-    weights: List[float] = [1.0]
-    k = 1
-    while True:
-        w = -weights[-1] * (d - k + 1) / k
-        if abs(w) < threshold:
-            break
-        weights.append(w)
-        k += 1
-        if k > 1000:
-            break
+def classify_market_regime_adf(
+    prices: np.ndarray,
+    vol_recent: float,
+    vol_historical: float,
+    adf_pvalue_threshold: float = ADF_P_VALUE_THRESHOLD,
+    trend_slope_threshold: float = TREND_SLOPE_THRESHOLD,
+    chaos_vol_threshold: float = CHAOS_VOL_THRESHOLD,
+) -> Dict[str, Any]:
+    """
+    Clasifica el régimen de mercado mediante test ADF sobre precios logarítmicos.
+    
+    v2.0: Implementación econométrica real (no heurística).
+    
+    Args:
+        prices: Array 1D de precios de cierre (NO retornos).
+        vol_recent: Volatilidad reciente (últimas 20 velas).
+        vol_historical: Volatilidad histórica de la ventana.
+        adf_pvalue_threshold: Umbral p-valor para estacionariedad (default: 0.05).
+        trend_slope_threshold: Pendiente mínima OLS para tendencia.
+        chaos_vol_threshold: Umbral ratio volatilidad para caos.
+    
+    Returns:
+        Dict con: regime, p_value, slope, vol_ratio, is_stationary, method, reason
+    """
+    # Validar datos suficientes
+    if prices is None or len(prices) < 50:
+        return {
+            "regime": "UNKNOWN",
+            "p_value": 1.0,
+            "slope": 0.0,
+            "vol_ratio": 1.0,
+            "is_stationary": False,
+            "method": "adf",
+            "reason": "Insufficient price data (<50 candles)"
+        }
+    
+    # 1. Transformación a precios logarítmicos (NIVELES, NO retornos)
+    log_prices = np.log(np.clip(prices, 1e-10, None))
+    
+    # 2. Ejecución del test ADF sobre niveles logarítmicos
+    try:
+        # Modelo 'c': incluye término constante (drift)
+        # autolag='AIC': selección automática de rezagos
+        adf_result = adfuller(log_prices, autolag='AIC', regression='c')
+        p_value = float(adf_result[1])
+        
+        # Validar p_value
+        if np.isnan(p_value) or p_value < 0:
+            p_value = 1.0
+    except Exception as err:
+        logger.warning(f"ADF execution error: {err}")
+        return {
+            "regime": "UNKNOWN",
+            "p_value": 1.0,
+            "slope": 0.0,
+            "vol_ratio": 1.0,
+            "is_stationary": False,
+            "method": "adf",
+            "reason": f"ADF execution error: {str(err)}"
+        }
+    
+    # 3. Cálculo del ratio de volatilidad
+    vol_ratio = float(vol_recent / vol_historical) if vol_historical > 0 else 1.0
+    
+    # 4. Evaluación de estacionariedad (RANGE)
+    # Si p_value <= umbral → serie estacionaria I(0) → reversión a la media
+    if p_value <= adf_pvalue_threshold:
+        return {
+            "regime": "RANGE",
+            "p_value": p_value,
+            "slope": 0.0,
+            "vol_ratio": vol_ratio,
+            "is_stationary": True,
+            "method": "adf",
+            "reason": f"Series is I(0) stationary at alpha={adf_pvalue_threshold}"
+        }
+    
+    # 5. Si es no-estacionaria I(1), determinar dirección con regresión OLS
+    recent_log_prices = log_prices[-20:]
+    x = np.arange(len(recent_log_prices))
+    
+    try:
+        slope, _ = np.polyfit(x, recent_log_prices, 1)
+        slope = float(slope)
+    except Exception as err:
+        logger.warning(f"OLS slope calculation error: {err}")
+        slope = 0.0
+    
+    # 6. Clasificación de TENDENCIA o CAOS para series I(1)
+    if vol_ratio >= chaos_vol_threshold:
+        regime = "CHAOS"
+        reason = f"High volatility regime (vol_ratio={vol_ratio:.2f})"
+    elif slope > trend_slope_threshold:
+        regime = "TREND_UP"
+        reason = f"Upward trend (slope={slope:.6f})"
+    elif slope < -trend_slope_threshold:
+        regime = "TREND_DOWN"
+        reason = f"Downward trend (slope={slope:.6f})"
+    else:
+        # Paseo aleatorio con baja deriva y volatilidad normal
+        regime = "RANGE"
+        reason = f"Non-stationary but low drift (slope={slope:.6f})"
+    
+    return {
+        "regime": regime,
+        "p_value": p_value,
+        "slope": slope,
+        "vol_ratio": vol_ratio,
+        "is_stationary": False,
+        "method": "adf",
+        "reason": reason
+    }
 
-    weights_arr = np.array(weights)
-    n = len(series)
-    width = len(weights_arr)
-    if n < width:
-        return np.full(n, np.nan)
-
-    result = np.full(n, np.nan)
-    for t in range(width - 1, n):
-        result[t] = np.dot(weights_arr[::-1], series[t - width + 1 : t + 1])
-    return result
-
-def _compute_features(closes: np.ndarray, highs: np.ndarray, lows: np.ndarray, volumes: np.ndarray) -> Optional[Dict[str, float]]:
+# ──────────────────────────────────────────────────────────────────────────────
+# 4. CÁLCULO DE FEATURES (Complementario para ADF)
+# ──────────────────────────────────────────────────────────────────────────────
+def _compute_features_for_adf(
+    closes: np.ndarray,
+    highs: np.ndarray,
+    lows: np.ndarray,
+    volumes: np.ndarray
+) -> Optional[Dict[str, float]]:
+    """
+    Calcula features necesarias para ADF y métricas complementarias.
+    v2.0: Enfocado en volatilidad para ADF, no en heurística de régimen.
+    """
     n = len(closes)
     if n < MIN_CANDLES:
         return None
@@ -106,26 +216,13 @@ def _compute_features(closes: np.ndarray, highs: np.ndarray, lows: np.ndarray, v
     returns = np.diff(log_prices)
     if len(returns) < MIN_CANDLES - 1:
         return None
-        
-    # FFD
-    ffd_series = _frac_diff_ffd(closes, d=0.4, threshold=1e-3)
-    valid_ffd = ffd_series[~np.isnan(ffd_series)]
-    ffd_slope = 0.0
-    if len(valid_ffd) >= 20:
-        x = np.arange(20)
-        try:
-            slope = np.polyfit(x, valid_ffd[-20:], 1)[0]
-            scale = np.std(valid_ffd[-20:]) if np.std(valid_ffd[-20:]) > 0 else 1.0
-            ffd_slope = float(slope / scale) if np.isfinite(slope) else 0.0
-        except Exception:
-            ffd_slope = 0.0
-
-    # Volatilidad normalizada
+    
+    # Volatilidad normalizada (crítico para ADF)
     recent_vol = float(np.std(returns[-20:])) if len(returns) >= 20 else float(np.std(returns))
     hist_vol = float(np.std(returns)) if np.std(returns) > 0 else 1e-10
     vol_norm = recent_vol / hist_vol if hist_vol > 0 else 0.0
-
-    # Autocorrelación
+    
+    # Autocorrelación (informativa, no determinante)
     def _autocorr(x: np.ndarray, lag: int) -> float:
         if len(x) <= lag:
             return 0.0
@@ -133,60 +230,24 @@ def _compute_features(closes: np.ndarray, highs: np.ndarray, lows: np.ndarray, v
         num = float(np.sum((x[: -lag] - mean_x) * (x[lag:] - mean_x)))
         den = float(np.sum((x - mean_x) ** 2))
         return num / den if den > 0 else 0.0
-
+    
     autocorr_1 = _autocorr(returns, 1)
-    autocorr_5 = _autocorr(returns, min(5, len(returns) - 1))
-
-    # Consistencia direccional
+    
+    # Consistencia direccional (informativa)
     signs = np.sign(returns[-20:])
     dir_consistency = float(np.abs(np.mean(signs))) if len(signs) > 0 else 0.0
     dir_mean = float(np.mean(returns[-20:])) if len(returns) >= 20 else 0.0
-
-    # Range ratio
-    ranges = highs[-20:] - lows[-20:]
-    close_changes = np.abs(np.diff(closes[-21:]))
-    mean_range = float(np.mean(ranges)) if len(ranges) > 0 else 0.0
-    mean_close_change = float(np.mean(close_changes)) if len(close_changes) > 0 else 1e-10
-    range_ratio = mean_range / mean_close_change if mean_close_change > 0 else 0.0
-
+    
     return {
-        "ffd_slope": ffd_slope,
         "vol_norm": min(vol_norm, 3.0),
         "autocorr_1": autocorr_1,
-        "autocorr_5": autocorr_5,
         "dir_consistency": dir_consistency,
         "dir_mean": dir_mean,
-        "range_ratio": range_ratio,
         "n_candles": n,
     }
 
-def _classify_heuristic(features: Dict[str, float]) -> Dict[str, float]:
-    vol_norm = features["vol_norm"]
-    autocorr = features["autocorr_1"]
-    dir_cons = features["dir_consistency"]
-    dir_sign = np.sign(features["dir_mean"])
-    ffd_sl = np.tanh(features["ffd_slope"])
-    range_ratio = min(features["range_ratio"], 3.0) / 3.0
-
-    trend_up = max(0.0, autocorr) * 0.35 + max(0.0, dir_sign) * dir_cons * 0.30 + max(0.0, ffd_sl) * 0.20
-    trend_down = max(0.0, -autocorr) * 0.35 + max(0.0, -dir_sign) * dir_cons * 0.30 + max(0.0, -ffd_sl) * 0.20
-    range_score = (1.0 - abs(autocorr)) * 0.35 + (1.0 - dir_cons) * 0.30 + (1.0 - abs(ffd_sl)) * 0.20
-    chaos = vol_norm * 0.10 + range_ratio * 0.05 + (1.0 - dir_cons) * 0.15
-
-    scores = np.array([trend_up, trend_down, range_score, chaos])
-    scores = np.clip(scores, 0.0, 10.0)
-    exp_scores = np.exp(scores - np.max(scores))
-    probs = exp_scores / exp_scores.sum()
-
-    return {
-        "TREND_UP": float(probs[0]),
-        "TREND_DOWN": float(probs[1]),
-        "RANGE": float(probs[2]),
-        "CHAOS": float(probs[3]),
-    }
-
 # ──────────────────────────────────────────────────────────────────────────────
-# 4. FETCH DE DATOS CON RETRY (v1.5)
+# 5. FETCH DE DATOS CON RETRY (v1.5 - sin cambios)
 # ──────────────────────────────────────────────────────────────────────────────
 async def _fetch_candles(session: aiohttp.ClientSession, coin: str) -> Optional[pd.DataFrame]:
     """
@@ -202,13 +263,11 @@ async def _fetch_candles(session: aiohttp.ClientSession, coin: str) -> Optional[
         "req": {"coin": coin, "interval": "1h", "startTime": st_time},
     }
 
-    # v1.5: Delay inicial para ser respetuoso con la API
     await asyncio.sleep(REQUEST_DELAY)
 
     for attempt in range(MAX_RETRIES):
         try:
             async with session.post(_HL_URL, json=payload, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                # v1.5: Manejo explícito de HTTP 429
                 if resp.status == 429:
                     if attempt < MAX_RETRIES - 1:
                         backoff = INITIAL_BACKOFF * (2 ** attempt)
@@ -262,7 +321,7 @@ async def _fetch_candles(session: aiohttp.ClientSession, coin: str) -> Optional[
     return None
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 5. PERSISTENCIA
+# 6. PERSISTENCIA (v2.0 - actualizada para ADF)
 # ──────────────────────────────────────────────────────────────────────────────
 def _ensure_tables() -> None:
     try:
@@ -273,9 +332,12 @@ def _ensure_tables() -> None:
                     timestamp_unix INTEGER NOT NULL,
                     coin TEXT NOT NULL,
                     interval TEXT NOT NULL DEFAULT '1h',
-                    ffd_slope REAL, vol_norm REAL, autocorr_1 REAL,
-                    autocorr_5 REAL, dir_consistency REAL, dir_mean REAL,
-                    range_ratio REAL, n_candles INTEGER,
+                    vol_norm REAL, autocorr_1 REAL,
+                    dir_consistency REAL, dir_mean REAL,
+                    n_candles INTEGER,
+                    p_value REAL,
+                    slope REAL,
+                    vol_ratio REAL,
                     UNIQUE(coin, interval, timestamp_unix)
                 )
             """)
@@ -289,7 +351,12 @@ def _ensure_tables() -> None:
                     prob_trend_up REAL, prob_trend_down REAL,
                     prob_range REAL, prob_chaos REAL,
                     confidence REAL, cycles_confirmed INTEGER,
-                    data_quality TEXT, method TEXT, cycle_id TEXT
+                    data_quality TEXT, method TEXT, cycle_id TEXT,
+                    p_value REAL,
+                    slope REAL,
+                    vol_ratio REAL,
+                    is_stationary INTEGER,
+                    reason TEXT
                 )
             """)
             _conn.commit()
@@ -305,8 +372,9 @@ def _persist_state(regime_state: Dict[str, Dict[str, Any]], cycle_id: str) -> No
                     INSERT INTO regime_state
                     (timestamp_unix, fecha_hora, coin, regime,
                      prob_trend_up, prob_trend_down, prob_range, prob_chaos,
-                     confidence, cycles_confirmed, data_quality, method, cycle_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     confidence, cycles_confirmed, data_quality, method, cycle_id,
+                     p_value, slope, vol_ratio, is_stationary, reason)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         int(time.time()), _now_str(), coin,
@@ -318,8 +386,13 @@ def _persist_state(regime_state: Dict[str, Dict[str, Any]], cycle_id: str) -> No
                         state.get("confidence", 0.0),
                         state.get("cycles_confirmed", 0),
                         state.get("data_quality", "OK"),
-                        state.get("method", "heuristic"),
+                        state.get("method", "adf"),
                         cycle_id,
+                        state.get("p_value", 1.0),
+                        state.get("slope", 0.0),
+                        state.get("vol_ratio", 1.0),
+                        1 if state.get("is_stationary", False) else 0,
+                        state.get("reason", ""),
                     ),
                 )
             _conn.commit()
@@ -337,21 +410,21 @@ def _persist_features(regime_state: Dict[str, Dict[str, Any]]) -> None:
                 _conn.execute(
                     """
                     INSERT OR REPLACE INTO regime_features
-                    (timestamp_unix, coin, interval, ffd_slope, vol_norm,
-                     autocorr_1, autocorr_5, dir_consistency, dir_mean,
-                     range_ratio, n_candles)
+                    (timestamp_unix, coin, interval, vol_norm,
+                     autocorr_1, dir_consistency, dir_mean,
+                     n_candles, p_value, slope, vol_ratio)
                     VALUES (?, ?, '1h', ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         now, coin,
-                        features.get("ffd_slope", 0.0),
                         features.get("vol_norm", 0.0),
                         features.get("autocorr_1", 0.0),
-                        features.get("autocorr_5", 0.0),
                         features.get("dir_consistency", 0.0),
                         features.get("dir_mean", 0.0),
-                        features.get("range_ratio", 0.0),
                         features.get("n_candles", 0),
+                        state.get("p_value", 1.0),
+                        state.get("slope", 0.0),
+                        state.get("vol_ratio", 1.0),
                     ),
                 )
             _conn.commit()
@@ -359,7 +432,7 @@ def _persist_features(regime_state: Dict[str, Dict[str, Any]]) -> None:
         logger.warning(f"RegimeEngine: error persistiendo features: {exc}")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 6. ORQUESTADOR
+# 7. ORQUESTADOR (v2.0 - usa ADF)
 # ──────────────────────────────────────────────────────────────────────────────
 async def ejecutar_regime_engine() -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any]]:
     cycle_id = f"REGIME_{datetime.now().strftime('%Y-%m-%d_%H-%M')}_{uuid.uuid4().hex[:4]}"
@@ -376,10 +449,13 @@ async def ejecutar_regime_engine() -> Tuple[Dict[str, Dict[str, Any]], Dict[str,
                         "regime": "UNKNOWN", "prob": {s: 0.25 for s in STATES},
                         "confidence": 0.0, "cycles_confirmed": 0, "data_quality": "ERROR",
                         "method": "none", "vol_regime": "UNKNOWN", "trend_strength": 0.0, "age_seconds": 0.0,
+                        "p_value": 1.0, "slope": 0.0, "vol_ratio": 1.0, "is_stationary": False,
+                        "reason": "Insufficient data"
                     }
                     continue
 
-                features = _compute_features(
+                # Calcular features para volatilidad
+                features = _compute_features_for_adf(
                     df["c"].values.astype(float),
                     df["h"].values.astype(float) if "h" in df.columns else df["c"].values,
                     df["l"].values.astype(float) if "l" in df.columns else df["c"].values,
@@ -391,13 +467,34 @@ async def ejecutar_regime_engine() -> Tuple[Dict[str, Dict[str, Any]], Dict[str,
                         "regime": "UNKNOWN", "prob": {s: 0.25 for s in STATES},
                         "confidence": 0.0, "cycles_confirmed": 0, "data_quality": "ERROR",
                         "method": "none", "vol_regime": "UNKNOWN", "trend_strength": 0.0, "age_seconds": 0.0,
+                        "p_value": 1.0, "slope": 0.0, "vol_ratio": 1.0, "is_stationary": False,
+                        "reason": "Feature calculation failed"
                     }
                     continue
 
-                probs = _classify_heuristic(features)
-                final_regime = max(probs, key=probs.get)
-                confidence = probs[final_regime] * 100
-
+                # v2.0: Clasificación con ADF real
+                adf_result = classify_market_regime_adf(
+                    prices=df["c"].values.astype(float),
+                    vol_recent=features["vol_norm"],
+                    vol_historical=1.0,  # Normalizado
+                    adf_pvalue_threshold=ADF_P_VALUE_THRESHOLD,
+                    trend_slope_threshold=TREND_SLOPE_THRESHOLD,
+                    chaos_vol_threshold=CHAOS_VOL_THRESHOLD,
+                )
+                
+                final_regime = adf_result["regime"]
+                p_value = adf_result["p_value"]
+                slope = adf_result["slope"]
+                vol_ratio = adf_result["vol_ratio"]
+                is_stationary = adf_result["is_stationary"]
+                reason = adf_result["reason"]
+                
+                # Convertir resultado ADF a probabilidades (para compatibilidad)
+                # ADF no produce probabilidades, así que asignamos 100% al régimen seleccionado
+                probs = {s: 0.0 for s in STATES}
+                probs[final_regime] = 1.0
+                confidence = 100.0
+                
                 vol_norm = features["vol_norm"]
                 vol_regime = "HIGH" if vol_norm > 2.0 else "ELEVATED" if vol_norm > 1.2 else "LOW" if vol_norm < 0.5 else "NORMAL"
                 trend_strength = abs(features["autocorr_1"]) * features["dir_consistency"]
@@ -408,12 +505,17 @@ async def ejecutar_regime_engine() -> Tuple[Dict[str, Dict[str, Any]], Dict[str,
                     "confidence": round(confidence, 1),
                     "cycles_confirmed": 1,
                     "data_quality": "OK",
-                    "method": "heuristic",
+                    "method": "adf",
                     "vol_regime": vol_regime,
                     "trend_strength": round(trend_strength, 3),
                     "age_seconds": 0.0,
                     "features": features,
                     "cycle_id": cycle_id,
+                    "p_value": p_value,
+                    "slope": slope,
+                    "vol_ratio": vol_ratio,
+                    "is_stationary": is_stationary,
+                    "reason": reason,
                 }
 
             except Exception as e:
@@ -422,6 +524,8 @@ async def ejecutar_regime_engine() -> Tuple[Dict[str, Dict[str, Any]], Dict[str,
                     "regime": "UNKNOWN", "prob": {s: 0.25 for s in STATES},
                     "confidence": 0.0, "cycles_confirmed": 0, "data_quality": "ERROR",
                     "method": "error", "vol_regime": "UNKNOWN", "trend_strength": 0.0, "age_seconds": 0.0,
+                    "p_value": 1.0, "slope": 0.0, "vol_ratio": 1.0, "is_stationary": False,
+                    "reason": f"Error: {str(e)}"
                 }
 
     # Agregación global
@@ -456,9 +560,13 @@ async def ejecutar_regime_engine() -> Tuple[Dict[str, Dict[str, Any]], Dict[str,
                 "regime_prob": rs.get("prob", {}),
                 "regime_vol": rs.get("vol_regime", "UNKNOWN"),
                 "regime_trend_strength": rs.get("trend_strength", 0.0),
+                "p_value_adf": rs.get("p_value", 1.0),
+                "slope_ols": rs.get("slope", 0.0),
+                "vol_ratio": rs.get("vol_ratio", 1.0),
+                "is_stationary": rs.get("is_stationary", False),
             })
 
-    # Actualizar snapshot con cycle_id y regime reales (completa lo que C3 dejó PRE_REGIME)
+    # Actualizar snapshot con cycle_id y regime reales
     try:
         with _lock:
             for coin in _assets:
@@ -481,7 +589,7 @@ async def ejecutar_regime_engine() -> Tuple[Dict[str, Dict[str, Any]], Dict[str,
     return regime_state, global_state
 
 # ──────────────────────────────────────────────────────────────────────────────
-# 7. EXPORT Y AUTO-EJECUCIÓN
+# 8. EXPORT Y AUTO-EJECUCIÓN
 # ──────────────────────────────────────────────────────────────────────────────
 globals()["REGIME_STATES"] = STATES
 globals()["ejecutar_regime_engine"] = ejecutar_regime_engine
@@ -492,24 +600,29 @@ try:
     globals()["REGIME_GLOBAL"] = REGIME_GLOBAL
 
     print(f"\n{_C}{'═' * 70}{_RST}")
-    print(f"{_C}🦅 mercabot_qwen | CELDA 3.5: MOTOR DE RÉGIMEN v1.5{_RST}")
+    print(f"{_C}🦅 mercabot_qwen | CELDA 3.5: MOTOR DE RÉGIMEN v2.0 (ADF REAL){_RST}")
     print(f"{_C}{'═' * 70}{_RST}")
     print(f"{_G}✅ Régimen global: {REGIME_GLOBAL['regime']}{_RST}")
     print(f"{_G}   Crypto: {REGIME_GLOBAL['crypto_regime']} | TradFi: {REGIME_GLOBAL['tradfi_regime']}{_RST}")
     print(f"{_G}   Confianza: {REGIME_GLOBAL['confidence']}% | Activos: {REGIME_GLOBAL['n_assets']}{_RST}")
+    print(f"{_G}   Método: Test ADF real (umbral p={ADF_P_VALUE_THRESHOLD}){_RST}")
     
-    # Desglose por activo
-    print(f"\n{_C}📊 Desglose por activo:{_RST}")
+    # Desglose por activo con detalles ADF
+    print(f"\n{_C}📊 Desglose por activo (ADF):{_RST}")
     for coin in _assets:
         if coin in REGIME_STATE:
             rs = REGIME_STATE[coin]
             status_color = _G if rs["regime"] != "UNKNOWN" else _R
-            print(f"   • {coin:<12} {status_color}{rs['regime']:<12} conf={rs['confidence']:>5.1f}%  vol={rs.get('vol_regime', '?'):<8} [{rs.get('method', '?')}]{_RST}")
+            p_val = rs.get("p_value", 1.0)
+            slope = rs.get("slope", 0.0)
+            vol_r = rs.get("vol_ratio", 1.0)
+            is_stat = "✅EST" if rs.get("is_stationary", False) else "❌NO-EST"
+            print(f"   • {coin:<12} {status_color}{rs['regime']:<12}{_RST} p={p_val:.4f} slope={slope:.6f} vol={vol_r:.2f} {is_stat}")
 
     print(f"{_C}{'═' * 70}{_RST}\n")
 
 except Exception as exc:
-    print(f"{_R}❌ Error en Motor de Régimen v1.5: {type(exc).__name__}: {exc}{_RST}")
+    print(f"{_R}❌ Error en Motor de Régimen v2.0: {type(exc).__name__}: {exc}{_RST}")
     logger.error(f"RegimeEngine error: {exc}")
     REGIME_STATE, REGIME_GLOBAL = {}, {"regime": "UNKNOWN", "crypto_regime": "UNKNOWN", "tradfi_regime": "UNKNOWN", "confidence": 0.0, "n_assets": 0, "n_crypto": 0, "n_tradfi": 0}
     globals()["REGIME_STATE"] = REGIME_STATE
