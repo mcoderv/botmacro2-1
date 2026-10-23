@@ -43,3 +43,4 @@ verificar_progreso.bat
 docs/**/*.zip
 *.bak 
 !config/CONSOLIDADO/central_params.json
+*.bak 

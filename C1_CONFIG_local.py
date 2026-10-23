@@ -12,10 +12,13 @@ from pathlib import Path
 #    PROJECT_ROOT puede venir del runner; si no, se infiere de este archivo.
 # ── Detección inteligente de entorno ──
 # En Windows local: siempre usar la ruta del archivo (ignora MACRO1_ROOT).
-# En Docker/Render (Linux con /app): respetar MACRO1_ROOT si existe.
+# MACRO2.1 es LOCAL (Windows, SIN Docker). MACRO1_ROOT solo aplica
+# al repo de PRODUCCION (botmacro, Linux/Docker).
 # Esto evita que variables de entorno "fantasma" rompan el entorno local.
 def _resolve_project_root() -> "Path":
     file_dir = Path(__file__).resolve().parent
+    # En Windows local SIEMPRE es False (no hay /app).
+    # Solo el repo de PRODUCCION (botmacro) lo evalua a True.
     is_container = (os.name != "nt") and Path("/app").exists()
     if is_container:
         env_root = os.environ.get("MACRO1_ROOT")
