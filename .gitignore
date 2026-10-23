@@ -44,3 +44,5 @@ docs/**/*.zip
 *.bak 
 !config/CONSOLIDADO/central_params.json
 *.bak 
+# --- docs/local: soporte personal, NO se sube a GitHub ---
+docs/local/

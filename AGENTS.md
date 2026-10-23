@@ -159,3 +159,17 @@ Yo no sé git. Vos me das el comando literal.
 - `C3_DATA_QUALITY.py` → validado, lo consumen 3 módulos.
 - `decisiones/000-render-litestream-r2.md` → configuración de producción.
 - Todo lo que esté en `botmacro` (producción) hasta que se valide en 2.1.
+
+---
+
+## Donde va cada cosa (docs/)
+
+- `docs/INFORME_MACRO2.1.md` — la spec vigente del bot. Leer primero.
+- `docs/PENDIENTES.md` — lista de trabajo abierta.
+- `docs/info/` — specs de referencia y linaje de datos.
+- `docs/investigaciones/` — investigaciones con fuentes (usar `PLANTILLA.md`).
+- `docs/local/` — soporte personal (chats de IA, borradores). **NO versionado.**
+- `docs/LEEME.md` — las reglas de esta carpeta.
+
+**Regla**: si la proxima IA necesita leerlo, va versionado. Si es soporte
+del usuario, va a `docs/local/` y no se sube a GitHub.
