@@ -11,12 +11,12 @@ ESTRUCTURA FINAL
       info/                   <- specs de referencia (data-lineage, spec-ms-v2)
       investigaciones/        <- tus investigaciones (+ PLANTILLA.md)
       LEEME.md                <- las reglas de esta carpeta
+      GUIA DE USO.txt         <- guia de uso (versionada)
+      prompt_inicial.md       <- prompt con el que arranco el proyecto (versionado)
       local/                  <- SOPORTE LOCAL, NO se sube a GitHub
         chats/                <- chats de IA (los viejos y los nuevos)
         INFORME_BOT_MACRO.md
         Resumen Completo del Proyecto 14102026.txt
-        GUIA DE USO.txt
-        prompt_inicial.md
 
     textos/                   <- desaparece (sus 3 archivos se reparten)
 
@@ -93,6 +93,7 @@ está en lo que se extrajo de él, no en el chat en sí. Si algo de un chat
 importa, se destila a una investigación o a un ADR.
 
 Los chats viejos (`chats_ant/`) quedaron en `docs/local/chats/chats_ant/`.
+La `GUIA DE USO` y el `prompt_inicial` si quedan versionados en `docs/`.
 """
 
 PLANTILLA_MD = """# PLANTILLA — Investigación
@@ -190,11 +191,14 @@ def ordenar():
         ("textos/INFORME_BOT_MACRO.md", "docs/local/INFORME_BOT_MACRO.md", False),
         ("textos/Resumen Completo del Proyecto 14102026.txt",
          "docs/local/Resumen Completo del Proyecto 14102026.txt", False),
-        ("docs/chats_ant/GUIA DE USO.txt", "docs/local/GUIA DE USO.txt", False),
-        ("docs/chats_ant/prompt_inicial.md", "docs/local/prompt_inicial.md", False),
+        ("docs/chats_ant/GUIA DE USO.txt", "docs/GUIA DE USO.txt", True),
+        ("docs/chats_ant/prompt_inicial.md", "docs/prompt_inicial.md", True),
     ]
 
     for origen, destino, versionado in plan:
+        if (RAIZ / destino).exists() and (RAIZ / origen).exists():
+            paso("[--] destino ya existe, no se toca: %s" % destino)
+            continue
         ok, detalle = _mover(origen, destino)
         if ok:
             movimientos.append({"de": origen, "a": destino})

@@ -29,3 +29,4 @@ está en lo que se extrajo de él, no en el chat en sí. Si algo de un chat
 importa, se destila a una investigación o a un ADR.
 
 Los chats viejos (`chats_ant/`) quedaron en `docs/local/chats/chats_ant/`.
+La `GUIA DE USO` y el `prompt_inicial` si quedan versionados en `docs/`.

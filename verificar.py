@@ -365,6 +365,7 @@ def check_docs():
         ("decisiones/000-render-litestream-r2.md", "ADR 000 (Render/Litestream/R2)"),
         ("decisiones/001-umbral-dinamico-volatilidad-PENDIENTE.md", "ADR 001 (umbral dinamico)"),
         ("decisiones/002-unificar-umbral-ADF.md", "ADR 002 (umbral ADF, con .md)"),
+        ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
     ]
     faltan = [d for d, _ in adrs if not (RAIZ / d).exists()]
     if faltan:
@@ -380,14 +381,18 @@ def check_docs():
             detalle += " | El 002 existe como '%s'. Renombralo a '002-unificar-umbral-ADF.md'." % cand
         falla("[ADRS] ADRs esperados incompletos", detalle)
     else:
-        ok("[ADRS] Los 3 ADRs estan presentes con nombre correcto")
+        ok("[ADRS] Los 4 ADRs estan presentes con nombre correcto")
 
     # duplicados
     raiz_inf = RAIZ / "INFORME_BOT_MACRO2.1.md"
     textos_inf = RAIZ / "textos" / "INFORME_BOT_MACRO2.1.md"
-    if raiz_inf.exists() and textos_inf.exists():
-        aviso("[DOCS] INFORME_BOT_MACRO2.1.md esta DUPLICADO (raiz y textos/)",
-              "Borra el de la raiz: python fixes\\aplicar_fixes.py")
+    docs_inf = RAIZ / "docs" / "INFORME_MACRO2.1.md"
+    if textos_inf.exists() and docs_inf.exists():
+        aviso("[DOCS] INFORME_BOT_MACRO2.1.md DUPLICADO (textos/ y docs/)",
+              "Borra el de textos/: python fixes\\ordenar_docs.py --deshacer")
+    if raiz_inf.exists() and (textos_inf.exists() or docs_inf.exists()):
+        aviso("[DOCS] INFORME_BOT_MACRO2.1.md esta DUPLICADO (raiz y otra carpeta)",
+              "Dejalo solo en docs/")
 
 
 def check_zip():

@@ -1,4 +1,12 @@
 # ADR 002 — Unificar el umbral ADF
+
+**Estado:** APLICADO (2026-10-23, commit `5361b4f`)
+
+> Umbral unificado en **0.05**, fuente unica `CENTRAL_PARAMS["macro"]`.
+> Tambien se corrigio H-3 (`backups_v2.1` / `logs_v2.1`) y H-5
+> (`_migrar_v28` ahora sobreescribe el JSON guardado).
+> `verificar.py` -> 19 ok / 0 fallas / 1 aviso.
+> **Pendiente:** medir el efecto real (ver `docs/PENDIENTES.md` 7).
 Fecha: 2026-10-23 | Estado: Propuesto
 
 ## Contexto

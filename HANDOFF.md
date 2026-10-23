@@ -1,32 +1,40 @@
 # HANDOFF — MACRO2.1
 
 > **Se reescribe en CADA cierre de sesión.** Es el archivo que reemplaza
-> a `docs/chats_ant/` (los 7 chats viejos que venías guardando a mano).
+> a los chats viejos que venías guardando a mano.
 >
 > Cuando cambies de IA, el paquete de traspaso es:
-> `AGENTS.md` (auto) + `ESTADO.md` + `HANDOFF.md` + `git log --oneline -20`
-> + salida de `python verificar.py`.
+> `AGENTS.md` (auto) + `ESTADO.md` + `HANDOFF.md` + `docs/PENDIENTES.md`
+> + `git log --oneline -20` + salida de `python verificar.py`.
 > Con eso, la IA nueva arranca entendiendo el proyecto. Sin esto, arranca de cero.
 
 ```
 Fecha    : 2026-10-23
-Sesion   : 1
+Sesion   : 2
 Repo     : botmacro2-1 (desarrollo)  —  NUNCA botmacro (produccion congelada)
-Commit   : 1f2c5bb
+Commit   : 5e0c481
 ```
 
 ---
 
 ## 1. Qué hice en esta sesión
 
-- Se creó el repo `botmacro2-1` en GitHub y se migró el remoto `origin`
-  a ese repo nuevo, dejando `origin-macro2` apuntando a `botmacro` (producción).
-- Commit `1f2c5bb`: checkpoint con I-1 (caja simétrica), I-2 (ADF real),
-  ADR 000/001/002, scripts de análisis y corrección del `.gitignore`.
-- Se creó el kit de gestión: `AGENTS.md`, `ESTADO.md`, `HANDOFF.md`,
-  `verificar.py` y los 4 scripts de `git/`.
-- Se detectó y documentó el bug **H-1** (umbral ADF 0.02 vs 0.05) y **H-3**
-  (C0 escribe en `backups/`, C2 lee de `backups_v2.1/`).
+- **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`.
+  Ahora no dependo de saber git.
+- **ADR 002 aplicado** (commit `5361b4f`): umbral ADF unificado en **0.05**,
+  fuente única `CENTRAL_PARAMS["macro"]`. Se corrigió también **H-3**
+  (`backups_v2.1` / `logs_v2.1`) y **H-5** (`_migrar_v28` ahora sobrescribe).
+- **`verificar.py`** — 19 ok / 0 fallas / 1 aviso. Es el contrato ejecutable
+  del proyecto: lo que él chequea, no se rompe en silencio.
+- **Re-score del umbral ADF** (`analisis/rescore_umbral.py`) — primera medición
+  real del efecto de ADR 002. **Dio falsos positivos** (ver §3.1).
+- **Docker eliminado de MACRO2.1** (ADR 003, commit `5e0c481`): `Dockerfile`,
+  `docker-compose.yml`, `.dockerignore`, `start.sh`, `litestream.yml`.
+  **Producción (`botmacro`) intacta.**
+- **`docs/` reordenada** — una sola carpeta con reglas claras:
+  `docs/INFORME_MACRO2.1.md` (spec), `docs/PENDIENTES.md` (tracking),
+  `docs/info/`, `docs/investigaciones/` (+`PLANTILLA.md`), `docs/local/`
+  (fuera de GitHub). `textos/` desapareció.
 
 ---
 
@@ -34,56 +42,59 @@ Commit   : 1f2c5bb
 
 | No hice | Por qué |
 |---|---|
-| Mover `ADF_P_VALUE_THRESHOLD` a la sección `macro` | Requiere tocar `C1_5_PARAM` + `C3_MACRO` + `_migrar_v28`. Es el ADR 002, va con su propio commit. |
-| Arreglar el bucket en `decisiones/000` | Es un cambio de doc, pero el ADR describe producción: necesita revisión aparte. |
-| Extraer el ZIP de `docs/investigaciones/` | Requiere decidir dónde queda el contenido extraído. |
-| Implementar `calidad_senal_v3` | Necesita la distribución real de `macro_score` de las 845 señales primero. |
-| Mover/actualizar `main.py`, `scheduler.py`, `ventana.py` | No los revisé: no estaban en el material compartido. |
-| Tocar producción (`botmacro`) | Está en DATA FREEZE. |
+| Arreglar `rescore_umbral.py` v1 | Re-scoreó placeholders (ms_v2=0) → falsos positivos. La v2 es el siguiente paso. |
+| `calidad_senal_v3` (etiquetas) | Necesita la distribución real de `macro_score`. Con 58 señales de v2, hay que ver si alcanza. |
+| ADR 001 (k×σ) | Es un cambio de un solo archivo (`C4`), pero **el PF no se va a mover**. Decidir si vale. |
+| Max DD de `report_validator.py` | No tengo el archivo para auditarlo. Pedirlo. |
+| Ventana 04:00-16:00 | Cambia el régimen de muestreo → los datos nuevos no son comparables con los viejos. Decisión de negocio. |
+| Backup externo de la DB | Es una acción manual tuya (copiar a Drive/disco). **Es la prioridad #1.** |
+| Borrar los 4 archivos "Nivel C" | `evaluar_nube.py`, `test_telegram.py`, `verificar_progreso.bat`, `diagnostico_bat.py` — siguen sin respuesta. No son dañinos. |
+| Tocar producción (`botmacro`) | DATA FREEZE. |
 
 ---
 
 ## 3. Qué creo que está frágil (opinión sin filtros)
 
-1. **H-1 es lo más grave.** El motor de régimen dice 0.05 y el score dice 0.02.
-   Con p=0.0485 (ejemplo real de BTC), C3_5 clasifica RANGE pero C3_MACRO
-   aplica la rama de *momentum*. **Todas las cifras del informe técnico
-   (HR 32.9%, PF 0.50, etc.) están medidas con esa incoherencia.**
-   No sonWrong: son *inconsistentes*. Hay que re-medir después del fix.
+1. **El 93% de las señales tiene `ms_v2 = 0` — y NO es un bug.** `ms_v2` se
+   agregó en v7.9.3; lo anterior quedó en 0. De 877 señales, solo **58** (6.6%)
+   tienen score v2 real. Cualquier estadística del v2 sobre 877 es basura:
+   hay que correrla sobre 58 y **leerla como ruido estadístico**.
 
-2. **La migracion `_migrar_v28` no sobrescribe** (usa `if k not in val_sec`).
-   Si cambiás el default en el código y el `central_params.json` ya guardado
-   tiene el valor viejo, **no se aplica** y el banner va a mentir mostrando
-   0.05 mientras el comportamiento sigue en 0.02.
+2. **El re-score v1 dio falsos positivos.** Re-scoreó las señales con
+   `ms_v2 = 0` como si tuvieran un score. De sus "10 que cambian de rama", 9
+   eran HYPE con `ms_v2 = 0.00` → inventadas. La auto-validación 2 (coherencia
+   de `s_mtf`) saltó: solo 128/877 (14.6%) cuadraban. **Ese script no se usa
+   hasta que excluya los placeholders.**
 
-3. **`C4` tiene dos criterios distintos**: el HR usa el umbral 0.05, el
-   Profit Factor usa `p > 0` / `p < 0`. Cuando se implemente k×σ, **el PF
-   no se va a mover**. Si la expectativa es "ver el PF subir al destrabar
-   el umbral", no va a pasar.
+3. **5 imports con fallback silencioso.** Es el riesgo #1 del proyecto. Si
+   cambiás la firma de una función, el pipeline **se degrupa en silencio** y
+   no falla. Ya lo dice el aviso de `verificar.py`, pero nadie lo arregló.
 
-4. **El filtro de entrada de `C4` es `|macro_score| >= 2`**
-   (`STRONG_BIAS_THRESHOLD`). Con umbrales 4/3/2, la etiqueta "RUIDO" queda
-   **vacía** → se pierde un nivel de la taxonomía.
+4. **El PF no depende del umbral de break-even.** `C4` usa el 0.05% solo para
+   el HR; el PF usa `p > 0` / `p < 0`. Si la expectativa con ADR 001 es "ver el
+   PF subir al destrabar el umbral", **eso no va a pasar**. El ADR 001 solo
+   mueve el HR.
 
-5. **La ventana horaria 08:00-17:00 no vive en el pipeline**, vive en
-   `ventana.py`/`scheduler.py`. Ampliarla a 04:00-16:00 cambia el régimen de
-   muestreo → los datos nuevos no son comparables con las 845 señales viejas.
+5. **LONG pierde, SHORT gana** (PF 0.50 vs 1.28). Y dentro de los cripto,
+   BTC PF 0.30 y SP500 PF 0.28. Eso no lo arregla ningún umbral: es
+   microestructura o la lógica de entrada. `xyz:SILVER` (PF 3.22) y
+   `xyz:GOLD` (2.64) sí funcionan. **Copiar el patrón de los que ganan
+   probablemente vale más que recalibrar umbrales.**
 
-6. **Cero tests.** Un `assert` de una línea sobre el umbral ADF habría
-   cazado H-1 hace semanas. `verificar.py` es el primer paso, no el final.
+6. **Cero tests.** `verificar.py` es el primer paso, no el final. Un `assert`
+   de una línea sobre el umbral ADF habría cazado H-1 hace semanas.
 
-7. **Los chats viejos** (`docs/chats_ant/`) tienen información que no está
-   en ningún otro lado. Están commiteados, así que no se pierden, pero
-   quedan fuera del flujo: de acá en adelante, `HANDOFF.md` los reemplaza.
+7. **La DB no tiene backup fuera del disco.** Es lo único no recuperable de
+   GitHub. 10 meses de evidencia en un solo archivo.
 
 ---
 
 ## 4. Qué chequear primero en la próxima sesión
 
-1. `python verificar.py` → ver qué falla ahora mismo.
-2. `python git\estado.py` → leer el "SIGUIENTE PASO" que sale del `ESTADO.md`.
-3. Si el próximo paso es ADR 002: leer `decisiones/002-Unificar el umbral ADF`
-   **y** `decisiones/001-umbral-dinamico-volatilidad-PENDIENTE.md`.
+1. `python verificar.py` → tiene que dar 19 ok / 0 fallas.
+2. `python git\estado.py` → leer el "SIGUIENTE PASO" del `ESTADO.md`.
+3. `docs/PENDIENTES.md` → la lista de trabajo.
+4. Si tocás el v2: leer `AGENTS.md` §5.1 y §5.2 **antes** de medir nada.
 
 ---
 
@@ -101,8 +112,11 @@ solo toca lo que el ADR dice que tiene que tocar.
 
 ## 6. Cosas pendientes de confirmación (preguntas abiertas)
 
-- ¿La DB de producción (Turso) usa las mismas 18 tablas que la local?
+- **¿La DB de producción (Turso) usa las mismas 22 tablas que la local?**
 - ¿`main.py` ejecuta las celdas en el mismo orden que el runner de Render?
 - ¿El `scheduler.py` local y el de Render comparten código o están duplicados?
-  (39 KB cada uno de `scheduler.py` y `report_validator.py` sugiere duplicación)
-- ¿El ZIP de `docs/investigaciones/` contiene algo que no esté en los .txt?
+  (39 KB cada uno de `scheduler.py` y `report_validator.py` lo sugiere)
+- ¿Los 4 archivos "Nivel C" (`evaluar_nube.py`, `test_telegram.py`,
+  `verificar_progreso.bat`, `diagnostico_bat.py`) se borran o se quedan?
+- **¿La `GUIA DE USO.txt` sigue al día?** Ahora está versionada en `docs/`.
+- **¿El ZIP de `docs/investigaciones/` contiene algo que no esté en los .txt?**
