@@ -92,8 +92,8 @@ PASO N — [qué hace en una línea]
 
 ### 5.1 `macro_score_v2` es RECIENTE — no arregles un bug que no existe
 
-`ms_v2` (el score multi-timeframe) se agregó en **v7.9.3**. Las señales
-anteriores a esa versión tienen `macro_score_v2 = 0.0` en la DB.
+`ms_v2` (el score multi-timeframe) se agregó en **v7.9.3** (desplegado el
+**2026-10-19 14:06**). Las señales anteriores tienen `macro_score_v2 = 0.0`.
 
 Medición real (2026-10-23, 877 señales resueltas a 24h). La clave es si el
 `ms_v2` guardado **se explica con los componentes** (`poc + caja + fvg + rs`
@@ -102,15 +102,51 @@ Medición real (2026-10-23, 877 señales resueltas a 24h). La clave es si el
 | Grupo | n | Qué significa |
 |---|---|---|
 | `ms_v2 >= 2` (FUERTE 20 + MODERADA 38) | **58** | Score v2 real y coherente |
-| `ms_v2 < 2` pero coherente | **70** | Coherente (score bajo, o 0 legítimo) |
-| `ms_v2` **incoherente** con los componentes | **749** (85%) | ❌ **No fue computado** |
+| `ms_v2 < 2` pero coherente | **53** | Coherente (score bajo, o 0 legítimo) |
+| `ms_v2` incoherente con los componentes | **748** (85%) | ❌ No fue computado (placeholder) |
+| Placeholders que *casualmente* son coherentes | **18** | ⚠️ Coherentes por casualidad, **NO son score real** |
 
-⚠️ **El 85% del histórico no tiene score v2 reconstruible.** No es un fallback
-roto: es antigüedad (v7.9.3 es reciente). No lo trates como bug.
+**Con score v2 REAL: 111 señales** (58 + 53). Las otras 766 tienen `ms_v2 = 0`
+de relleno. De las 129 "reconstruibles", **18 son placeholders** (13-18/10).
 
-**Consecuencia para medir cosas:** el conjunto de trabajo es de **128 señales
-reconstruibles** (58 + 70), NO 877. Con 128 los cortes por etiqueta quedan en
-20-40 señales → **leelo como ruido estadístico, no como resultado.**
+⚠️ **El 85% del histórico no tiene score v2.** No es un fallback roto: es
+antigüedad. No lo trates como bug.
+
+### 5.1.b ⛔ TRAMPA CONFIRMADA: las etiquetas NO son comparables entre sí
+
+La distribución de etiquetas **cambió por completo el 19/10**:
+
+| Fecha | FUERTE | MODERADA | RUIDO | total |
+|---|---|---|---|---|
+| 13-18/10 | 0 | 0 | 18 | 18 (placeholders) |
+| 19/10 | 1 | 21 | 28 | 50 |
+| 20/10 | 9 | 12 | 8 | 29 |
+| 21/10 | 10 | 5 | 17 | 32 |
+
+**Comparar HR/PF entre etiquetas = comparar días distintos.** El "RUIDO tiene
+PF 4.43" NO es evidencia: es que el grupo RUIDO abarca más días.
+**Siempre cortar por día (o por ventana) antes de comparar etiquetas.**
+Con n=5-28 por celda es ruido, pero al menos NO está confundido por fecha.
+
+### 5.1.c El `ms_v2` está operando con dos inputs degradados
+
+De la corrida del 2026-10-23 (`python main.py`):
+
+1. **`s_mtf` = 0 en 7 de 12 activos.** El bias 1D/4H/1H sale `N/A` → el
+   término multi-timeframe (0.30·1h + 0.20·4h + 0.15·1d) **no aporta nada**.
+   El "multi-timeframe" del nombre no está multi-timeframe.
+2. **La rama momentum casi nunca se activa.** El p-value del residual FFD
+   (`P-v4.2`) salió < 0.001 en los 12 activos de esa corrida, y en el histórico
+   **856 de 877 señales tienen p < 0.02** → todas toman la rama estacionario.
+
+Consecuencia: `ms_v2 = 0.5·poc + 1.5·caja + 1.5·fvg + 0.5·rs + s_mtf + d`,
+donde `s_mtf = 0` y `rs` (el flujo, el componente que mejor predice la
+dirección) pesa **0.5** en vez de 2.0.
+
+**Consecuencia medida:** el patrón `(poc=±1, rs=±2, caja+fvg=∓1)` da
+`s_base = 0 EXACTO` en la rama estacionario y `±4` en la momentum. Esas
+señales (breakouts con flujo fuerte) quedan con `ms_v2 = 0` → etiqueta RUIDO.
+Es un hecho de la fórmula, verificable sin datos.
 
 ### 5.2 El re-score de umbral ADF v1 dio FALSOS POSITIVOS
 
@@ -120,8 +156,18 @@ eran HYPE con `ms_v2 = 0.00` → **falsas**.
 
 La **v2** (mismo archivo, reescrito) corrige esto: clasifica cada señal en
 reconstruible / no reconstruible, re-scorea **solo** las reconstruibles,
-aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal
-(¿hay señales posteriores a la existencia del v2 sin score? eso sí sería un bug).
+aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal.
+
+**Resultado de la v2 (2026-10-23):**
+- **0 señales cambian de etiqueta** al pasar de 0.02 a 0.05.
+- Motivo: de las 10 que cambian de rama, 9 son placeholders y 1 ya estaba en
+  0.05. **Solo 1 señal en toda la DB se generó con el umbral nuevo.**
+- **VEREDICTO: el ADR 002 es INMEDIBLE con los datos actuales.** No es que sea
+  inútil: es que no hay historia con el umbral viejo Y score v2 a la vez.
+  **Necesita ~30 días más de datos para evaluarse.**
+
+**Herramienta: `python analisisescore_umbral_v2.py`** (reconstruye el score
+sin tocar la DB, con auto-validaciones y corte temporal).
 
 ### 5.3 Lo que YA está hecho — no lo rehagas
 
@@ -187,8 +233,8 @@ aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal
 |---|---|
 | `verificar.py` | ⭐ Chequeos de salud del proyecto. Correlo siempre. |
 | `git/guardar.py`, `git/estado.py`, `git/deshacer.py`, `git/revisar_archivo.py` | Scripts de git (no sé git → usá estos) |
-| `fixes/` | ⭐ `actualizar_gobierno.py` — reescribe AGENTS/ESTADO/HANDOFF/PENDIENTES + ADRs. **Correlo al cierre de cada sesión.** |
-| `analisis/` | Herramientas de análisis vivas: post-mortem, MAE/MFE, `rescore_umbral_v2.py` |
+| `fixes/` | Scripts de patch, uno por intervención. Todos con `--deshacer`. |
+| `analisis/` | Scripts de análisis de datos (post-mortem, MAE/MFE, re-score) |
 | `config/CONSOLIDADO/central_params.json` | ⭐ Config real en disco (la que se usa) |
 | `data/vault_v2.1.db` | ⭐ La DB. 907 señales (877 resueltas a 24h). **No tocar, no versionar** |
 

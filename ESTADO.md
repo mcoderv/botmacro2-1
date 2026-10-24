@@ -1,36 +1,36 @@
 # ESTADO — MACRO2.1
 
-> **Este archivo se REESCRIBE, no se acumula.** Si tiene más de ~70 líneas, está mal.
+> **Este archivo se REESCRIBE, no se acumula.** Si tiene más de ~75 líneas, está mal.
 > Debe responder "¿dónde estoy?" en 20 segundos.
 > Un ESTADO desactualizado es PEOR que ninguno: miente.
 
 ```
-Actualizado : 2026-10-23
-Commit      : 5e0c481 (Docker fuera + docs reordenadas)
+Actualizado : 2026-10-24
+Commit      : 23efea4 (limpieza fixes/ y analisis/)
 Repo        : botmacro2-1  (desarrollo, local, SIN Docker)  |  botmacro = PRODUCCION (congelada)
 FASE        : 2 — intervenciones
+DB          : 914 señales (902 resueltas a 24h)
 ```
 
 ---
 
 ## ✅ FUNCIONA (verificado)
 
-- [x] Pipeline completo C0 → C4 corre
-- [x] `data/vault_v2.1.db` con **907 señales (877 resueltas a 24h)**
+- [x] Pipeline completo C0 → C4 corre de punta a punta (`python main.py`), 8 celdas, sin excepciones
+- [x] `data/vault_v2.1.db` con **914 señales (902 resueltas a 24h)** — la última corrida registró +7
 - [x] **I-1** — Caja simétrica (`am` 0.5-2.0, `caja_p` ±2)
 - [x] **I-2** — Motor de régimen ADF real
 - [x] **ADR 002 aplicado** — umbral ADF unificado en 0.05, fuente única `CENTRAL_PARAMS["macro"]`
-- [x] **H-3 arreglado** — C0 y C2 usan `backups_v2.1` / `logs_v2.1`
-- [x] **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py` (no dependo de saber git)
-- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso. Correlo SIEMPRE después de cada cambio.
-- [x] **Repos separados** — `botmacro2-1` (dev) y `botmacro` (prod congelada)
-- [x] **Sin Docker en 2.1** (ADR 003) — el clon local corre con `python` directo
-- [x] **`.env` nunca commiteado**
+- [x] **H-3 y H-5 corregidos** — carpetas `backups_v2.1`/`logs_v2.1` y `_migrar_v28` sobrescribe
+- [x] **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`
+- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso
+- [x] **Sin Docker en 2.1** (ADR 003) — producción intacta
 - [x] **`docs/` ordenada** — `docs/local/` fuera de GitHub, `docs/LEEME.md` con las reglas
+- [x] **Backup local de la DB** en `Desktop\MACRO2.1_BACKUP\` (falta subirlo a Drive)
 
 ---
 
-## 📊 MÉTRICAS REALES (24h, 877 señales)
+## 📊 MÉTRICAS (24h, snapshot de 877 resueltas del 23/10)
 
 | Corte | n | HR | PF | avg |
 |---|---|---|---|---|
@@ -42,8 +42,8 @@ FASE        : 2 — intervenciones
 | BTC | 64 | 23.4% | **0.30** | −0.630% |
 | xyz:SP500 | 88 | 39.8% | **0.28** | −0.351% |
 
-**LONG pierde plata, SHORT gana.** El problema es estructural, no de umbral.
-No lo arregla el k×σ (el PF no depende del break-even).
+**LONG pierde plata, SHORT gana.** Problema estructural, no de umbral.
+El k×σ (ADR 001) **no lo arregla**: el PF no depende del break-even.
 
 ---
 
@@ -51,42 +51,50 @@ No lo arregla el k×σ (el PF no depende del break-even).
 
 | # | Riesgo | Impacto | Estado |
 |---|---|---|---|
-| **H-7a** | **Backup de la DB solo en un disco** | Hecho local (`Desktop\MACRO2.1_BACKUP\`), falta Drive | 🟡 **Falta subirlo a Drive** |
+| **H-7a** | Backup de la DB solo en un disco | Hecho local (`Desktop\MACRO2.1_BACKUP\`), falta Drive | 🟡 **Falta subirlo a Drive** |
 | **H-7b** | 5 imports con fallback silencioso | Una regresión se degrupa sin avisar | 🟡 Pendiente → matar fallbacks |
+| **H-9** | **`ms_v2` con `s_mtf = 0`** (bias 1D/4H/1H sale N/A en 7 de 12 activos) y **la rama momentum casi nunca se activa** (856 de 877 señales con p < 0.02) | El score v2 no tiene su componente multi-TF y `rs` (el flujo) pesa 0.5 en vez de 2.0. **El v2 no discrimina** | 🔴 **NUEVO — MAXIMA prioridad** |
+| **H-10** | **Las etiquetas NO son comparables entre sí**: la distribución cambió por completo el 19/10 (0 FUERTE → 1 → 9 → 10) | Cualquier HR/PF por etiqueta es un confound temporal | 🔴 **NUEVO** |
+| **H-11** | `main.py` corre **8 celdas, no 9** (falta `C3_DATA_QUALITY` como celda) y el runner dice "Celdas ejecutadas: 3" | Cosmético, pero el mapa de `AGENTS.md` miente | 🟡 Nuevo |
+| **H-12** | C2 dice "Sin backups previos" → el auto-restore nunca tuvo nada que restaurar. Y la nota operativa apunta a `GEM5_INSTITUTIONAL_VAULT.db` (nombre inexistente) | El auto-restore nunca se probó de verdad | 🟡 Nuevo |
 | **H-2** | Dos ADF distintos (niveles en C3_5 vs residuales FFD en C3_MACRO) | El régimen no mueve el conmutador de `ms_v2` | 🟡 Pendiente de decisión |
-| **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo | Sesga HR (no el PF). Trivial en BTC, excesivo en EUR | 🟡 Pendiente → ADR 001 |
+| **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo | Sesga HR (no el PF) | 🟡 Pendiente → ADR 001 |
 | **H-6** | `SCORE_ALTA=14` / `SCORE_MEDIA=8` con `macro_score` máximo 6 | Código muerto. Todo cae en BAJA o RUIDO | 🟡 Pendiente → `calidad_senal_v3` |
 | **H-8** | 6 cripto pierden (BTC PF 0.30) mientras TradFi gana | Estructural, no de umbral | 🟡 En investigación |
-| **H-5** | `_migrar_v28` no sobrescribía el JSON guardado | El default del código no se aplicaba | ✅ **RESUELTO** (ADR 002) |
-| **H-1** | Umbral ADF 0.02 en C3_MACRO vs 0.05 en C3_5 | El régimen y el `ms_v2` se contradecían | ✅ **RESUELTO** (ADR 002) |
-| **H-3** | `C0` escribía en `backups/`, `C2` leía de `backups_v2.1/` | El auto-restore no encontraba nada | ✅ **RESUELTO** |
+| **H-5** | `_migrar_v28` no sobrescribía el JSON guardado | El default del código no se aplicaba | ✅ RESUELTO |
+| **H-1** | Umbral ADF 0.02 en C3_MACRO vs 0.05 en C3_5 | El régimen y el `ms_v2` se contradecían | ✅ RESUELTO |
+| **H-3** | `C0` escribía en `backups/`, `C2` leía de `backups_v2.1/` | El auto-restore no encontraba nada | ✅ RESUELTO |
 
 ---
 
 ## ⏰ ANTES DE CUALQUIER COSA
 
-**Subí `C:\Users\MD\Desktop\MACRO2.1_BACKUP\` a Drive.** El backup local ya
-está hecho (23/10): `vault_v2.1.db` (907 señales) + `env_respaldo.txt`.
+**Subí `C:\Users\MD\Desktop\MACRO2.1_BACKUP\` a Drive.** El backup
+local ya está hecho (23/10): `vault_v2.1.db` + `env_respaldo.txt`.
 Es lo único del proyecto que **no** se recupera de GitHub.
 
 ---
 
 ## ➡️ SIGUIENTE PASO (uno solo)
 
-**Arreglar `analisis\rescore_umbral.py` y medir el efecto real del ADR 002.**
+**Cerrar H-9 y H-10: entender por qué el `bias` 1D/4H/1H sale `N/A` y qué pasó
+el 19/10.**
 
-- La v1 re-scoreó señales con `ms_v2 = 0` (placeholder) → dio falsos positivos
-  (9 de los 10 "cambios" eran HYPE con `ms_v2 = 0.00`).
-- La v2 tiene que: (a) clasificar cada señal en **reconstruible / no
-  reconstruible** (auto-validación 2), (b) re-scorear **solo** las
-  reconstruibles (**128 de 877**), (c) abortar si la auto-validación 1 no da
-  ≥90%, (d) reportar el corte temporal (señales post-v2 sin score = bug real).
-- **Con 58 señales los cortes por etiqueta son de 20-40 → ruido estadístico.**
-  El objetivo NO es "demostrar que el umbral 0.05 mejora el HR" (no lo va a
-  hacer: el HR y el PF no cambian con el umbral). El objetivo es **cuantificar
-  cuántas señales cambian de rama** y dejarlo documentado.
+Dos comandos que ya están pendientes:
+```
+findstr /i /c:"no_data_or_too_few" /c:"INSUFFICIENT" /c:"no disponible" logs_v2.1\*.log
+```
+→ dice si el `N/A` es por pocas velas (Hyperliquid no devolvió 20) o por error.
 
-Después de eso, el backlog de código está en `docs/PENDIENTES.md`.
+**Pregunta para el usuario:** ¿qué cambió el 2026-10-19 en el pipeline? Candidatas:
+(1) desplegaste v7.9.3, (2) cambiaste la ventana operativa o reiniciaste el
+scheduler (→ el "Ojo B" del pendiente #4), (3) tocaste C3_MACRO / C3_DATA_QUALITY.
+
+**Después**: métricas por etiqueta **dentro de cada día** (elimina el confound de
+H-10) y, con el diagnóstico cerrado, un ADR para la rama del `ms_v2`.
+
+**Herramienta:** `python analisis\rescore_umbral_v2.py` (ya tiene el corte
+por día y el corte por subgrupo).
 
 ---
 
@@ -96,4 +104,4 @@ Después de eso, el backlog de código está en `docs/PENDIENTES.md`.
 - Si algo funciona, no se toca sin ADR.
 - Después de cada cambio: `python verificar.py`, y si falla, no se avanza.
 - Los chats no se archivan a mano: cada sesión cierra con `HANDOFF.md`.
-- **Un cambio por sesión.** Y un commit por cambio.
+- Un cambio por sesión. Y un commit por cambio.

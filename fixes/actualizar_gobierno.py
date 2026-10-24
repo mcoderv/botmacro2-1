@@ -140,8 +140,8 @@ PASO N — [qué hace en una línea]
 
 ### 5.1 `macro_score_v2` es RECIENTE — no arregles un bug que no existe
 
-`ms_v2` (el score multi-timeframe) se agregó en **v7.9.3**. Las señales
-anteriores a esa versión tienen `macro_score_v2 = 0.0` en la DB.
+`ms_v2` (el score multi-timeframe) se agregó en **v7.9.3** (desplegado el
+**2026-10-19 14:06**). Las señales anteriores tienen `macro_score_v2 = 0.0`.
 
 Medición real (2026-10-23, 877 señales resueltas a 24h). La clave es si el
 `ms_v2` guardado **se explica con los componentes** (`poc + caja + fvg + rs`
@@ -150,15 +150,51 @@ Medición real (2026-10-23, 877 señales resueltas a 24h). La clave es si el
 | Grupo | n | Qué significa |
 |---|---|---|
 | `ms_v2 >= 2` (FUERTE 20 + MODERADA 38) | **58** | Score v2 real y coherente |
-| `ms_v2 < 2` pero coherente | **70** | Coherente (score bajo, o 0 legítimo) |
-| `ms_v2` **incoherente** con los componentes | **749** (85%) | ❌ **No fue computado** |
+| `ms_v2 < 2` pero coherente | **53** | Coherente (score bajo, o 0 legítimo) |
+| `ms_v2` incoherente con los componentes | **748** (85%) | ❌ No fue computado (placeholder) |
+| Placeholders que *casualmente* son coherentes | **18** | ⚠️ Coherentes por casualidad, **NO son score real** |
 
-⚠️ **El 85% del histórico no tiene score v2 reconstruible.** No es un fallback
-roto: es antigüedad (v7.9.3 es reciente). No lo trates como bug.
+**Con score v2 REAL: 111 señales** (58 + 53). Las otras 766 tienen `ms_v2 = 0`
+de relleno. De las 129 "reconstruibles", **18 son placeholders** (13-18/10).
 
-**Consecuencia para medir cosas:** el conjunto de trabajo es de **128 señales
-reconstruibles** (58 + 70), NO 877. Con 128 los cortes por etiqueta quedan en
-20-40 señales → **leelo como ruido estadístico, no como resultado.**
+⚠️ **El 85% del histórico no tiene score v2.** No es un fallback roto: es
+antigüedad. No lo trates como bug.
+
+### 5.1.b ⛔ TRAMPA CONFIRMADA: las etiquetas NO son comparables entre sí
+
+La distribución de etiquetas **cambió por completo el 19/10**:
+
+| Fecha | FUERTE | MODERADA | RUIDO | total |
+|---|---|---|---|---|
+| 13-18/10 | 0 | 0 | 18 | 18 (placeholders) |
+| 19/10 | 1 | 21 | 28 | 50 |
+| 20/10 | 9 | 12 | 8 | 29 |
+| 21/10 | 10 | 5 | 17 | 32 |
+
+**Comparar HR/PF entre etiquetas = comparar días distintos.** El "RUIDO tiene
+PF 4.43" NO es evidencia: es que el grupo RUIDO abarca más días.
+**Siempre cortar por día (o por ventana) antes de comparar etiquetas.**
+Con n=5-28 por celda es ruido, pero al menos NO está confundido por fecha.
+
+### 5.1.c El `ms_v2` está operando con dos inputs degradados
+
+De la corrida del 2026-10-23 (`python main.py`):
+
+1. **`s_mtf` = 0 en 7 de 12 activos.** El bias 1D/4H/1H sale `N/A` → el
+   término multi-timeframe (0.30·1h + 0.20·4h + 0.15·1d) **no aporta nada**.
+   El "multi-timeframe" del nombre no está multi-timeframe.
+2. **La rama momentum casi nunca se activa.** El p-value del residual FFD
+   (`P-v4.2`) salió < 0.001 en los 12 activos de esa corrida, y en el histórico
+   **856 de 877 señales tienen p < 0.02** → todas toman la rama estacionario.
+
+Consecuencia: `ms_v2 = 0.5·poc + 1.5·caja + 1.5·fvg + 0.5·rs + s_mtf + d`,
+donde `s_mtf = 0` y `rs` (el flujo, el componente que mejor predice la
+dirección) pesa **0.5** en vez de 2.0.
+
+**Consecuencia medida:** el patrón `(poc=±1, rs=±2, caja+fvg=∓1)` da
+`s_base = 0 EXACTO` en la rama estacionario y `±4` en la momentum. Esas
+señales (breakouts con flujo fuerte) quedan con `ms_v2 = 0` → etiqueta RUIDO.
+Es un hecho de la fórmula, verificable sin datos.
 
 ### 5.2 El re-score de umbral ADF v1 dio FALSOS POSITIVOS
 
@@ -168,8 +204,18 @@ eran HYPE con `ms_v2 = 0.00` → **falsas**.
 
 La **v2** (mismo archivo, reescrito) corrige esto: clasifica cada señal en
 reconstruible / no reconstruible, re-scorea **solo** las reconstruibles,
-aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal
-(¿hay señales posteriores a la existencia del v2 sin score? eso sí sería un bug).
+aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal.
+
+**Resultado de la v2 (2026-10-23):**
+- **0 señales cambian de etiqueta** al pasar de 0.02 a 0.05.
+- Motivo: de las 10 que cambian de rama, 9 son placeholders y 1 ya estaba en
+  0.05. **Solo 1 señal en toda la DB se generó con el umbral nuevo.**
+- **VEREDICTO: el ADR 002 es INMEDIBLE con los datos actuales.** No es que sea
+  inútil: es que no hay historia con el umbral viejo Y score v2 a la vez.
+  **Necesita ~30 días más de datos para evaluarse.**
+
+**Herramienta: `python analisis\rescore_umbral_v2.py`** (reconstruye el score
+sin tocar la DB, con auto-validaciones y corte temporal).
 
 ### 5.3 Lo que YA está hecho — no lo rehagas
 
@@ -235,8 +281,8 @@ aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal
 |---|---|
 | `verificar.py` | ⭐ Chequeos de salud del proyecto. Correlo siempre. |
 | `git/guardar.py`, `git/estado.py`, `git/deshacer.py`, `git/revisar_archivo.py` | Scripts de git (no sé git → usá estos) |
-| `fixes/` | ⭐ `actualizar_gobierno.py` — reescribe AGENTS/ESTADO/HANDOFF/PENDIENTES + ADRs. **Correlo al cierre de cada sesión.** |
-| `analisis/` | Herramientas de análisis vivas: post-mortem, MAE/MFE, `rescore_umbral_v2.py` |
+| `fixes/` | Scripts de patch, uno por intervención. Todos con `--deshacer`. |
+| `analisis/` | Scripts de análisis de datos (post-mortem, MAE/MFE, re-score) |
 | `config/CONSOLIDADO/central_params.json` | ⭐ Config real en disco (la que se usa) |
 | `data/vault_v2.1.db` | ⭐ La DB. 907 señales (877 resueltas a 24h). **No tocar, no versionar** |
 
@@ -312,37 +358,37 @@ Yo no sé git. Vos me das el comando literal.
 # ═════════════════════════════════════════════════════════════════════════════
 ESTADO_MD = """# ESTADO — MACRO2.1
 
-> **Este archivo se REESCRIBE, no se acumula.** Si tiene más de ~70 líneas, está mal.
+> **Este archivo se REESCRIBE, no se acumula.** Si tiene más de ~75 líneas, está mal.
 > Debe responder "¿dónde estoy?" en 20 segundos.
 > Un ESTADO desactualizado es PEOR que ninguno: miente.
 
 ```
-Actualizado : 2026-10-23
-Commit      : 5e0c481 (Docker fuera + docs reordenadas)
+Actualizado : 2026-10-24
+Commit      : 23efea4 (limpieza fixes/ y analisis/)
 Repo        : botmacro2-1  (desarrollo, local, SIN Docker)  |  botmacro = PRODUCCION (congelada)
 FASE        : 2 — intervenciones
+DB          : 914 señales (902 resueltas a 24h)
 ```
 
 ---
 
 ## ✅ FUNCIONA (verificado)
 
-- [x] Pipeline completo C0 → C4 corre
-- [x] `data/vault_v2.1.db` con **907 señales (877 resueltas a 24h)**
+- [x] Pipeline completo C0 → C4 corre de punta a punta (`python main.py`), 8 celdas, sin excepciones
+- [x] `data/vault_v2.1.db` con **914 señales (902 resueltas a 24h)** — la última corrida registró +7
 - [x] **I-1** — Caja simétrica (`am` 0.5-2.0, `caja_p` ±2)
 - [x] **I-2** — Motor de régimen ADF real
 - [x] **ADR 002 aplicado** — umbral ADF unificado en 0.05, fuente única `CENTRAL_PARAMS["macro"]`
-- [x] **H-3 arreglado** — C0 y C2 usan `backups_v2.1` / `logs_v2.1`
-- [x] **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py` (no dependo de saber git)
-- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso. Correlo SIEMPRE después de cada cambio.
-- [x] **Repos separados** — `botmacro2-1` (dev) y `botmacro` (prod congelada)
-- [x] **Sin Docker en 2.1** (ADR 003) — el clon local corre con `python` directo
-- [x] **`.env` nunca commiteado**
+- [x] **H-3 y H-5 corregidos** — carpetas `backups_v2.1`/`logs_v2.1` y `_migrar_v28` sobrescribe
+- [x] **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`
+- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso
+- [x] **Sin Docker en 2.1** (ADR 003) — producción intacta
 - [x] **`docs/` ordenada** — `docs/local/` fuera de GitHub, `docs/LEEME.md` con las reglas
+- [x] **Backup local de la DB** en `Desktop\\MACRO2.1_BACKUP\\` (falta subirlo a Drive)
 
 ---
 
-## 📊 MÉTRICAS REALES (24h, 877 señales)
+## 📊 MÉTRICAS (24h, snapshot de 877 resueltas del 23/10)
 
 | Corte | n | HR | PF | avg |
 |---|---|---|---|---|
@@ -354,8 +400,8 @@ FASE        : 2 — intervenciones
 | BTC | 64 | 23.4% | **0.30** | −0.630% |
 | xyz:SP500 | 88 | 39.8% | **0.28** | −0.351% |
 
-**LONG pierde plata, SHORT gana.** El problema es estructural, no de umbral.
-No lo arregla el k×σ (el PF no depende del break-even).
+**LONG pierde plata, SHORT gana.** Problema estructural, no de umbral.
+El k×σ (ADR 001) **no lo arregla**: el PF no depende del break-even.
 
 ---
 
@@ -363,42 +409,50 @@ No lo arregla el k×σ (el PF no depende del break-even).
 
 | # | Riesgo | Impacto | Estado |
 |---|---|---|---|
-| **H-7a** | **Backup de la DB solo en un disco** | Hecho local (`Desktop\\MACRO2.1_BACKUP\\`), falta Drive | 🟡 **Falta subirlo a Drive** |
+| **H-7a** | Backup de la DB solo en un disco | Hecho local (`Desktop\\MACRO2.1_BACKUP\\`), falta Drive | 🟡 **Falta subirlo a Drive** |
 | **H-7b** | 5 imports con fallback silencioso | Una regresión se degrupa sin avisar | 🟡 Pendiente → matar fallbacks |
+| **H-9** | **`ms_v2` con `s_mtf = 0`** (bias 1D/4H/1H sale N/A en 7 de 12 activos) y **la rama momentum casi nunca se activa** (856 de 877 señales con p < 0.02) | El score v2 no tiene su componente multi-TF y `rs` (el flujo) pesa 0.5 en vez de 2.0. **El v2 no discrimina** | 🔴 **NUEVO — MAXIMA prioridad** |
+| **H-10** | **Las etiquetas NO son comparables entre sí**: la distribución cambió por completo el 19/10 (0 FUERTE → 1 → 9 → 10) | Cualquier HR/PF por etiqueta es un confound temporal | 🔴 **NUEVO** |
+| **H-11** | `main.py` corre **8 celdas, no 9** (falta `C3_DATA_QUALITY` como celda) y el runner dice "Celdas ejecutadas: 3" | Cosmético, pero el mapa de `AGENTS.md` miente | 🟡 Nuevo |
+| **H-12** | C2 dice "Sin backups previos" → el auto-restore nunca tuvo nada que restaurar. Y la nota operativa apunta a `GEM5_INSTITUTIONAL_VAULT.db` (nombre inexistente) | El auto-restore nunca se probó de verdad | 🟡 Nuevo |
 | **H-2** | Dos ADF distintos (niveles en C3_5 vs residuales FFD en C3_MACRO) | El régimen no mueve el conmutador de `ms_v2` | 🟡 Pendiente de decisión |
-| **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo | Sesga HR (no el PF). Trivial en BTC, excesivo en EUR | 🟡 Pendiente → ADR 001 |
+| **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo | Sesga HR (no el PF) | 🟡 Pendiente → ADR 001 |
 | **H-6** | `SCORE_ALTA=14` / `SCORE_MEDIA=8` con `macro_score` máximo 6 | Código muerto. Todo cae en BAJA o RUIDO | 🟡 Pendiente → `calidad_senal_v3` |
 | **H-8** | 6 cripto pierden (BTC PF 0.30) mientras TradFi gana | Estructural, no de umbral | 🟡 En investigación |
-| **H-5** | `_migrar_v28` no sobrescribía el JSON guardado | El default del código no se aplicaba | ✅ **RESUELTO** (ADR 002) |
-| **H-1** | Umbral ADF 0.02 en C3_MACRO vs 0.05 en C3_5 | El régimen y el `ms_v2` se contradecían | ✅ **RESUELTO** (ADR 002) |
-| **H-3** | `C0` escribía en `backups/`, `C2` leía de `backups_v2.1/` | El auto-restore no encontraba nada | ✅ **RESUELTO** |
+| **H-5** | `_migrar_v28` no sobrescribía el JSON guardado | El default del código no se aplicaba | ✅ RESUELTO |
+| **H-1** | Umbral ADF 0.02 en C3_MACRO vs 0.05 en C3_5 | El régimen y el `ms_v2` se contradecían | ✅ RESUELTO |
+| **H-3** | `C0` escribía en `backups/`, `C2` leía de `backups_v2.1/` | El auto-restore no encontraba nada | ✅ RESUELTO |
 
 ---
 
 ## ⏰ ANTES DE CUALQUIER COSA
 
-**Subí `C:\\Users\\MD\\Desktop\\MACRO2.1_BACKUP\\` a Drive.** El backup local ya
-está hecho (23/10): `vault_v2.1.db` (907 señales) + `env_respaldo.txt`.
+**Subí `C:\\Users\\MD\\Desktop\\MACRO2.1_BACKUP\\` a Drive.** El backup
+local ya está hecho (23/10): `vault_v2.1.db` + `env_respaldo.txt`.
 Es lo único del proyecto que **no** se recupera de GitHub.
 
 ---
 
 ## ➡️ SIGUIENTE PASO (uno solo)
 
-**Arreglar `analisis\\rescore_umbral.py` y medir el efecto real del ADR 002.**
+**Cerrar H-9 y H-10: entender por qué el `bias` 1D/4H/1H sale `N/A` y qué pasó
+el 19/10.**
 
-- La v1 re-scoreó señales con `ms_v2 = 0` (placeholder) → dio falsos positivos
-  (9 de los 10 "cambios" eran HYPE con `ms_v2 = 0.00`).
-- La v2 tiene que: (a) clasificar cada señal en **reconstruible / no
-  reconstruible** (auto-validación 2), (b) re-scorear **solo** las
-  reconstruibles (**128 de 877**), (c) abortar si la auto-validación 1 no da
-  ≥90%, (d) reportar el corte temporal (señales post-v2 sin score = bug real).
-- **Con 58 señales los cortes por etiqueta son de 20-40 → ruido estadístico.**
-  El objetivo NO es "demostrar que el umbral 0.05 mejora el HR" (no lo va a
-  hacer: el HR y el PF no cambian con el umbral). El objetivo es **cuantificar
-  cuántas señales cambian de rama** y dejarlo documentado.
+Dos comandos que ya están pendientes:
+```
+findstr /i /c:"no_data_or_too_few" /c:"INSUFFICIENT" /c:"no disponible" logs_v2.1\\*.log
+```
+→ dice si el `N/A` es por pocas velas (Hyperliquid no devolvió 20) o por error.
 
-Después de eso, el backlog de código está en `docs/PENDIENTES.md`.
+**Pregunta para el usuario:** ¿qué cambió el 2026-10-19 en el pipeline? Candidatas:
+(1) desplegaste v7.9.3, (2) cambiaste la ventana operativa o reiniciaste el
+scheduler (→ el "Ojo B" del pendiente #4), (3) tocaste C3_MACRO / C3_DATA_QUALITY.
+
+**Después**: métricas por etiqueta **dentro de cada día** (elimina el confound de
+H-10) y, con el diagnóstico cerrado, un ADR para la rama del `ms_v2`.
+
+**Herramienta:** `python analisis\\rescore_umbral_v2.py` (ya tiene el corte
+por día y el corte por subgrupo).
 
 ---
 
@@ -408,7 +462,7 @@ Después de eso, el backlog de código está en `docs/PENDIENTES.md`.
 - Si algo funciona, no se toca sin ADR.
 - Después de cada cambio: `python verificar.py`, y si falla, no se avanza.
 - Los chats no se archivan a mano: cada sesión cierra con `HANDOFF.md`.
-- **Un cambio por sesión.** Y un commit por cambio.
+- Un cambio por sesión. Y un commit por cambio.
 """
 
 
@@ -426,101 +480,129 @@ HANDOFF_MD = """# HANDOFF — MACRO2.1
 > Con eso, la IA nueva arranca entendiendo el proyecto. Sin esto, arranca de cero.
 
 ```
-Fecha    : 2026-10-23
-Sesion   : 2
+Fecha    : 2026-10-24
+Sesion   : 3
 Repo     : botmacro2-1 (desarrollo)  —  NUNCA botmacro (produccion congelada)
-Commit   : 5e0c481
+Commit   : 23efea4
+DB       : 914 señales (902 resueltas a 24h)
 ```
 
 ---
 
 ## 1. Qué hice en esta sesión
 
-- **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`.
-  Ahora no dependo de saber git.
-- **ADR 002 aplicado** (commit `5361b4f`): umbral ADF unificado en **0.05**,
-  fuente única `CENTRAL_PARAMS["macro"]`. Se corrigió también **H-3**
-  (`backups_v2.1` / `logs_v2.1`) y **H-5** (`_migrar_v28` ahora sobrescribe).
-- **`verificar.py`** — 19 ok / 0 fallas / 1 aviso. Es el contrato ejecutable
-  del proyecto: lo que él chequea, no se rompe en silencio.
-- **Re-score del umbral ADF** (`analisis/rescore_umbral.py`) — primera medición
-  real del efecto de ADR 002. **Dio falsos positivos** (ver §3.1).
-- **Docker eliminado de MACRO2.1** (ADR 003, commit `5e0c481`): `Dockerfile`,
-  `docker-compose.yml`, `.dockerignore`, `start.sh`, `litestream.yml`.
-  **Producción (`botmacro`) intacta.**
-- **`docs/` reordenada** — una sola carpeta con reglas claras:
-  `docs/INFORME_MACRO2.1.md` (spec), `docs/PENDIENTES.md` (tracking),
-  `docs/info/`, `docs/investigaciones/` (+`PLANTILLA.md`), `docs/local/`
-  (fuera de GitHub). `textos/` desapareció.
+- **Docker eliminado de MACRO2.1** (ADR 003): `Dockerfile`, `docker-compose.yml`,
+  `.dockerignore`, `start.sh`, `litestream.yml`. **Producción (`botmacro`) intacta.**
+- **`docs/` reordenada**: `docs/INFORME_MACRO2.1.md` (spec, intacta),
+  `docs/PENDIENTES.md` (tracking), `docs/info/`, `docs/investigaciones/` (+`PLANTILLA.md`),
+  `docs/local/` (fuera de GitHub). `textos/` eliminada.
+- **Gobierno reescrito**: `AGENTS.md`, `ESTADO.md`, `HANDOFF.md`, `docs/PENDIENTES.md`
+  + ADR 003. `verificar.py` ahora chequea los 4 ADRs.
+- **`rescore_umbral.py` v2**: el v1 re-scoreó placeholders (ms_v2 = 0) y dio falsos
+  positivos. La v2 clasifica reconstruible / no reconstruible, re-scorea solo las
+  reconstruibles, aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal.
+- **Pipeline verificado de punta a punta**: `python main.py` corre las 8 celdas sin
+  excepciones y registró +7 señales (907 → 914).
+- **Backup local de la DB** en `Desktop\\MACRO2.1_BACKUP\\` (falta Drive).
 
 ---
 
-## 2. Qué NO hice (y por qué)
+## 2. Los hallazgos importantes (léelos antes de tocar el score)
+
+### 2.1 El ADR 002 es INMEDIBLE con los datos actuales
+
+- **0 señales cambian de etiqueta** al pasar de 0.02 a 0.05.
+- Motivo: de las 10 que cambian de rama, 9 son placeholders y 1 ya estaba en 0.05.
+  **Solo 1 señal se generó con el umbral nuevo.**
+- No significa que el ADR sea inútil: significa que **no hay historia con umbral
+  viejo Y score v2 a la vez**. Necesita ~30 días más de datos.
+
+### 2.2 El `ms_v2` opera con dos inputs degradados (H-9)
+
+1. **`s_mtf` = 0 en 7 de 12 activos.** El bias 1D/4H/1H sale `N/A`.
+2. **La rama momentum casi nunca se activa.** `P-v4.2` < 0.001 en los 12 activos de
+   la última corrida; en el histórico **856 de 877 señales tienen p < 0.02**.
+
+→ El score v2 es siempre `0.5·poc + 1.5·caja + 1.5·fvg + 0.5·rs + 0 + d`.
+El flujo (`rs`), que es el componente que mejor predice la dirección, pesa **0.5**
+en vez de 2.0.
+
+**Consecuencia medida:** `(poc=±1, rs=±2, caja+fvg=∓1)` → `s_base = 0 EXACTO` en
+estacionario y `±4` en momentum. Esos breakouts con flujo fuerte quedan con
+`ms_v2 = 0` → etiqueta RUIDO. Hecho de fórmula, verificable sin datos.
+
+### 2.3 Las etiquetas NO son comparables entre sí (H-10)
+
+La distribución cambió por completo el 19/10: 0 FUERTE → 1 → 9 → 10.
+**Comparar HR/PF entre etiquetas = comparar días distintos.** El "RUIDO tiene
+PF 4.43" NO es evidencia.
+
+**Siempre cortar por día (o por ventana) antes de comparar etiquetas.**
+
+### 2.4 Cuántas señales tienen score v2 REAL: 111 (no 129)
+
+| Grupo | n |
+|---|---|
+| `ms_v2 >= 2` (FUERTE 20 + MODERADA 38) | 58 |
+| `ms_v2 < 2` coherente | 53 |
+| Placeholders casualmente coherentes (13-18/10) | 18 ⚠️ NO son score real |
+| Placeholders incoherentes | 748 |
+
+**Con 111 señales, cualquier corte por etiqueta es ruido.**
+
+---
+
+## 3. Qué NO hice (y por qué)
 
 | No hice | Por qué |
 |---|---|
-| Arreglar `rescore_umbral.py` v1 | Re-scoreó placeholders (ms_v2=0) → falsos positivos. La v2 es el siguiente paso. |
-| `calidad_senal_v3` (etiquetas) | Necesita la distribución real de `macro_score`. Con 58 señales de v2, hay que ver si alcanza. |
-| ADR 001 (k×σ) | Es un cambio de un solo archivo (`C4`), pero **el PF no se va a mover**. Decidir si vale. |
-| Max DD de `report_validator.py` | No tengo el archivo para auditarlo. Pedirlo. |
-| Ventana 04:00-16:00 | Cambia el régimen de muestreo → los datos nuevos no son comparables con los viejos. Decisión de negocio. |
-| Backup externo de la DB | Es una acción manual tuya (copiar a Drive/disco). **Es la prioridad #1.** |
-| Borrar los 4 archivos "Nivel C" | `evaluar_nube.py`, `test_telegram.py`, `verificar_progreso.bat`, `diagnostico_bat.py` — siguen sin respuesta. No son dañinos. |
-| Tocar producción (`botmacro`) | DATA FREEZE. |
+| Arreglar el `s_mtf = 0` / la rama del `ms_v2` | Es un cambio al scoring → necesita ADR, y el diagnóstico del `N/A` no está cerrado. |
+| Métricas por etiqueta dentro de cada día | Es el próximo corte, pero con n=5-28 por celda va a ser ruido. Primero el diagnóstico. |
+| `calidad_senal_v3` (etiquetas 14/8/4) | Es sobre el `macro_score` **legacy**, otro problema. |
+| ADR 001 (k×σ) | Mueve el HR, no el PF. Decidir si vale. |
+| Max DD de `report_validator.py` | Confirmado que `C4` lo calcula bien; el bug está aislado en `report_validator.py`. Hace falta el archivo. |
+| Ventana 04:00-16:00 | Changes el régimen de muestreo → invalidaría la comparabilidad otra vez. Coordinar con H-10. |
+| Matar los 5 fallbacks silenciosos | Toca 4 módulos. Sesión propia. |
+| Backup a Drive | **Es una acción manual tuya.** Es la prioridad #1 y no la puedo hacer yo. |
 
 ---
 
-## 3. Qué creo que está frágil (opinión sin filtros)
+## 4. Qué creo que está frágil (opinión sin filtros)
 
-1. **El 85% de las señales NO tiene score v2 reconstruible — y NO es un bug.**
-   `ms_v2` se agregó en v7.9.3 (reciente); lo anterior quedó en 0. De 877
-   señales: **58** con `ms_v2 >= 2`, **70** con score bajo pero coherente,
-   **749 incoherentes** (no computadas). El grupo de trabajo real es de
-   **128 señales**. Cualquier estadística del v2 sobre 877 es basura.
-
-2. **El re-score v1 dio falsos positivos.** Re-scoreó las señales con
-   `ms_v2 = 0` como si tuvieran un score. De sus "10 que cambian de rama", 9
-   eran HYPE con `ms_v2 = 0.00` → inventadas. La auto-validación 2 (coherencia
-   de `s_mtf`) saltó: solo 128/877 (14.6%) cuadraban. **Ese script no se usa
-   hasta que excluya los placeholders.**
-
-3. **5 imports con fallback silencioso.** Es el riesgo #1 del proyecto. Si
-   cambiás la firma de una función, el pipeline **se degrupa en silencio** y
-   no falla. Ya lo dice el aviso de `verificar.py`, pero nadie lo arregló.
-
-4. **El PF no depende del umbral de break-even.** `C4` usa el 0.05% solo para
-   el HR; el PF usa `p > 0` / `p < 0`. Si la expectativa con ADR 001 es "ver el
-   PF subir al destrabar el umbral", **eso no va a pasar**. El ADR 001 solo
-   mueve el HR.
-
-5. **LONG pierde, SHORT gana** (PF 0.50 vs 1.28). Y dentro de los cripto,
-   BTC PF 0.30 y SP500 PF 0.28. Eso no lo arregla ningún umbral: es
-   microestructura o la lógica de entrada. `xyz:SILVER` (PF 3.22) y
-   `xyz:GOLD` (2.64) sí funcionan. **Copiar el patrón de los que ganan
-   probablemente vale más que recalibrar umbrales.**
-
-6. **Cero tests.** `verificar.py` es el primer paso, no el final. Un `assert`
-   de una línea sobre el umbral ADF habría cazado H-1 hace semanas.
-
-7. **La DB no tiene backup fuera del disco.** Es lo único no recuperable de
-   GitHub. 10 meses de evidencia en un solo archivo.
+1. **El score v2 no puede discriminar** (H-9). Sin el término multi-timeframe y
+   siempre en la misma rama, es ruido con nombre bonito. **Arreglar esto tiene
+   más impacto que recalibrar cualquier umbral.**
+2. **Cualquier análisis del v2 sobre las 877 señales es basura.** El grupo real
+   son 111 (3 días). Y aun esas están confundidas por fecha.
+3. **Los 5 fallbacks silenciosos** siguen siendo el riesgo #1 latente. Hoy no
+  aroni (verificado línea por línea), pero el día que uno se dispare, el
+   pipeline se degrupa y no dice nada.
+4. **`main.py` corre 8 celdas, no 9**, y el runner reporta "Celdas ejecutadas: 3".
+   Cosmético, pero el mapa de `AGENTS.md` miente.
+5. **El auto-restore nunca se probó**: C2 dice "Sin backups previos". Si mañana
+   corrompés la DB, no hay de dónde restaurar.
+6. **LONG pierde, SHORT gana** (PF 0.50 vs 1.28). Y dentro de los cripto, BTC
+   PF 0.30 y SP500 PF 0.28. Eso no lo arregla ningún umbral: es microestructura
+   o lógica de entrada. `xyz:SILVER` (PF 3.22) y `xyz:GOLD` (2.64) sí funcionan.
+   **Copiar el patrón de los que ganan vale más que recalibrar umbrales.**
+7. **Cero tests.** `verificar.py` es el primer paso, no el final.
 
 ---
 
-## 4. Qué chequear primero en la próxima sesión
+## 5. Qué chequear primero en la próxima sesión
 
 1. `python verificar.py` → tiene que dar 19 ok / 0 fallas.
-2. `python git\\estado.py` → leer el "SIGUIENTE PASO" del `ESTADO.md`.
-3. `docs/PENDIENTES.md` → la lista de trabajo.
-4. Si tocás el v2: leer `AGENTS.md` §5.1 y §5.2 **antes** de medir nada.
+2. `python git\estado.py` → leer el "SIGUIENTE PASO" del `ESTADO.md`.
+3. `AGENTS.md` §5.1, §5.1.b y §5.1.c — son los hallazgos de hoy.
+4. Si tocás el v2: leer `AGENTS.md` §5.1.b ANTES de comparar etiquetas.
 
 ---
 
-## 5. Cómo verificar que no rompí nada
+## 6. Cómo verificar que no rompí nada
 
 ```cmd
 python verificar.py
-python git\\revisar_archivo.py <archivo_modificado>
+python git\revisar_archivo.py <archivo_modificado>
 ```
 
 Criterio de aceptación: `verificar.py` sin FALLAS, y el diff del commit
@@ -528,16 +610,18 @@ solo toca lo que el ADR dice que tiene que tocar.
 
 ---
 
-## 6. Cosas pendientes de confirmación (preguntas abiertas)
+## 7. Cosas pendientes de confirmación (preguntas abiertas)
 
-- **¿La DB de producción (Turso) usa las mismas 22 tablas que la local?**
+- **¿Qué cambió el 2026-10-19 en el pipeline?** (desplegue de v7.9.3 / cambio
+  de ventana / cambio en C3_MACRO / cambio de mercado). Define si H-10 es un
+  artefacto de despliegue o de diseño.
+- **¿Por qué el `bias` 1D/4H/1H sale `N/A`?** El motivo está en
+  `logs_v2.1\\*.log` (`no_data_or_too_few` / `INSUFFICIENT` / `exception:`).
+- ¿Los 4 archivos "Nivel C" se borran o se quedan?
+- ¿La DB de producción (Turso) usa las mismas 22 tablas que la local?
 - ¿`main.py` ejecuta las celdas en el mismo orden que el runner de Render?
 - ¿El `scheduler.py` local y el de Render comparten código o están duplicados?
-  (39 KB cada uno de `scheduler.py` y `report_validator.py` lo sugiere)
-- ¿Los 4 archivos "Nivel C" (`evaluar_nube.py`, `test_telegram.py`,
-  `verificar_progreso.bat`, `diagnostico_bat.py`) se borran o se quedan?
-- **¿La `GUIA DE USO.txt` sigue al día?** Ahora está versionada en `docs/`.
-- **¿El ZIP de `docs/investigaciones/` contiene algo que no esté en los .txt?**
+- ¿El ZIP de `docs/investigaciones/` contiene algo que no esté en los .txt?
 """
 
 
@@ -550,7 +634,7 @@ PENDIENTES_MD = """# PENDIENTES — MACRO2.1
 > `docs/INFORME_MACRO2.1.md` es la **spec de referencia** (no se edita);
 > este archivo es el que dice **qué falta y qué se hizo**.
 >
-> Actualizado: 2026-10-23
+> Actualizado: 2026-10-24
 
 ---
 
@@ -559,61 +643,96 @@ PENDIENTES_MD = """# PENDIENTES — MACRO2.1
 | # | Qué | Dónde |
 |---|---|---|
 | 1 | Umbral ADF unificado en **0.05**, fuente única `CENTRAL_PARAMS["macro"]` | ADR 002, commit `5361b4f` |
-| 2 | `C0`/`C2` usan `backups_v2.1` / `logs_v2.1` (auto-restore operativo) | H-3, commit `5361b4f` |
+| 2 | `C0`/`C2` usan `backups_v2.1` / `logs_v2.1` | H-3, commit `5361b4f` |
 | 3 | `_migrar_v28` **sobrescribe** el `central_params.json` guardado | H-5, commit `5361b4f` |
-| 4 | **`scheduler.py` ya lee `PORT`** del entorno (fallback `HEALTH_PORT`/8080) | Ya estaba, commit `5e0c481` lo confirmó |
+| 4 | **`scheduler.py` ya lee `PORT`** del entorno | Ya estaba, confirmado en `5e0c481` |
 | 5 | Bucket R2 = `mercabot-qwen-db` (no `macrobot-vault`) | Ya estaba |
 | 6 | Sin Docker en MACRO2.1 | ADR 003, commit `5e0c481` |
 | 7 | `docs/` reordenada, `textos/` eliminada, `docs/local/` fuera de GitHub | commit `5e0c481` |
+| 8 | Kit de git (`guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`) | commit `5361b4f` |
+| 9 | `verificar.py` con 19 checks, incluidos los 4 ADRs | commit `da0ad11` |
+| 10 | `rescore_umbral.py` v2 (solo reconstruibles, aborta si AV1 < 90%) | `analisis/` |
+| 11 | `fixes/` y `analisis/` limpios (parches de una vez → `docs/local/`) | commit `23efea4` |
+| 12 | **Pipeline verificado de punta a punta** (`python main.py`, 8 celdas, +7 señales) | 2026-10-23 |
+| 13 | **Backup local de la DB** en `Desktop\\MACRO2.1_BACKUP\\` | 2026-10-23 |
 
 ---
 
 ## 🔴 CÓDIGO (pendientes del informe técnico)
 
-### 1. Etiquetas de calidad → `calidad_senal_v3`
-- **Problema:** umbrales legacy (14/8/4) incompatibles con `macro_score` (máx real 6). Todo cae en RUIDO/BAJA.
+### 1. `ms_v2`: `s_mtf = 0` + rama momentum inactiva  ← **AHORA ES EL #1**
+- **Problema (H-9):** el bias 1D/4H/1H sale `N/A` en 7 de 12 activos → `s_mtf = 0`.
+  Y el p del residual FFD sale < 0.02 en 856 de 877 señales → **la rama momentum
+  casi nunca se activa**. El score v2 queda siempre en
+  `0.5·poc + 1.5·caja + 1.5·fvg + 0.5·rs + 0 + d`.
+- **Consecuencia:** el flujo (`rs`), que mejor predice la dirección, pesa 0.5 en
+  vez de 2.0. Las señales `(poc=±1, rs=±2, caja+fvg=∓1)` dan `s_base = 0 EXACTO`
+  → quedan como RUIDO.
+- **Bloqueante:** no se sabe todavía por qué el bias sale `N/A`.
+  → `findstr /i /c:"no_data_or_too_few" /c:"INSUFFICIENT" /c:"no disponible" logs_v2.1\\*.log`
+- **Posibles fixes (todas necesitan ADR):** (A) guardar ambas ramas en columnas
+  separadas; (B) decidir la rama por detección de breakout en vez del ADF; (C)
+  piso al `rs` en la rama estacionario.
+- **Ojo:** `AGENTS.md` §5.1.c
+
+### 2. El score v2 no se puede evaluar todavía (H-10)
+- **Problema:** la distribución de etiquetas cambió por completo el 19/10
+  (0 FUERTE → 1 → 9 → 10). Comparar HR/PF entre etiquetas = comparar días distintos.
+- **Pendiente:** (a) saber qué cambió el 19/10; (b) medir por día antes de comparar.
+- **Herramienta:** `python analisis\\rescore_umbral_v2.py` (ya corta por día y por subgrupo).
+
+### 3. Etiquetas de calidad → `calidad_senal_v3`
+- **Problema (H-6):** umbrales legacy (14/8/4) incompatibles con `macro_score` (máx real 6).
 - **Corrección:** recalibrar a ALTA (≥4) / MEDIA (≥3) / BAJA (≥2), o usar el score crudo.
-- **Ojo:** con solo 58 señales que tienen `ms_v2` real, los cortes por etiqueta
-  quedan en 20-40 señales. **Riesgo alto de sobreajuste.** Considerar
-  `calidad_senal_v3` como **columna nueva**, sin mutar la legacy.
+- **Ojo:** es sobre el `macro_score` **legacy**, otro problema distinto del v2.
+  Con 111 señales reales, los cortes quedan en 20-40 → **riesgo alto de
+  sobreajuste.** Considerar **columna nueva**, sin mutar la legacy.
 
-### 2. Umbral dinámico k×σ → ADR 001
-- **Problema:** `BREAKEVEN_THRESHOLD_PCT = 0.05` fijo. Trivial para BTC, excesivo para `xyz:EUR`.
-- **Corrección:** `umbral = k * σ` (σ de los retornos del activo), en **columna nueva**, con baseline recalculado.
+### 4. Umbral dinámico k×σ → ADR 001
+- **Problema (H-4):** `BREAKEVEN_THRESHOLD_PCT = 0.05` fijo. Trivial para BTC, excesivo para `xyz:EUR`.
+- **Corrección:** `umbral = k * σ`, en **columna nueva**, con baseline recalculado.
 - **Realidad:** mueve el **HR**, **no el PF** (`C4` calcula el PF con `p > 0` / `p < 0`).
-- **Decisión pendiente:** ¿se implementa o se pospone? (El informe decía "si es complejo, se puede dejar".)
+- **Decisión pendiente:** ¿se implementa o se pospone?
 
-### 3. `report_validator.py` → Max DD
-- **Problema:** reporta Max DD de 270.88% (imposible en un solo segmento) → está sumando drawdowns de segmentos/activos.
-- **Corrección:** calcularlo sobre la **curva de capital acumulada** (pico a valle), no sumando segmentos.
+### 5. `report_validator.py` → Max DD
+- **Problema:** reporta Max DD de 270.88% → está sumando drawdowns de segmentos.
+- **Confirmado:** `C4_SENIAL_VALIDATOR._calculate_metrics` lo calcula **bien**
+  (`np.cumsum` → pico-valle). El bug está **aislado** en `report_validator.py`.
 - **Bloqueante:** hace falta el archivo para auditarlo.
 
-### 4. `ventana.py` / `scheduler.py` → ventana 04:00-16:00
-- **Problema:** la ventana 08:00-17:00 deja los targets de 8h fuera de horario → 84.2% de contaminación.
+### 6. `ventana.py` / `scheduler.py` → ventana 04:00-16:00
+- **Problema:** la ventana 08:00-17:00 deja los targets de 8h fuera → 84.2% de contaminación.
 - **Corrección:** ampliar a **04:00-16:00** (Caracas) + validación escalonada 4→8→12→16.
-- **Ojo A:** `C4_SENIAL_VALIDATOR.py` tiene `RESOLUTION_WINDOWS_HOURS = [4, 8, 24]` hardcodeado. La escalonada 4→8→12→16 **contradice** eso. Hay que elegir.
-- **Ojo B:** cambiar la ventana cambia el régimen de muestreo → **los datos nuevos no son comparables con los viejos**.
+- **Ojo A:** `C4_SENIAL_VALIDATOR.py` tiene `RESOLUTION_WINDOWS_HOURS = [4, 8, 24]` hardcodeado. Hay que elegir.
+- **Ojo B:** cambiar la ventana **cambia el régimen de muestreo → los datos nuevos no
+  son comparables con los viejos.** Con H-10 abierto, esto puede ser la causa
+  del corte del 19/10. **Coordinar antes de tocar.**
 
-### 5. Matar los 5 fallbacks silenciosos de import
+### 7. Matar los 5 fallbacks silenciosos de import  ← **riesgo #1 latente**
 - `C2_5_CONTEXTO_local.py:78`, `C3_MACRO_local.py:42`, `:51`, `:126`, `C3_5_REGIME_ENGINE.py:60`
-- Deben fallar fuerte, o tener un flag explícito. Es el riesgo #1 del proyecto.
+- Deben fallar fuerte, o tener un flag explícito.
+- **Verificado el 23/10 que hoy ninguno se dispara.** El día que uno se dispare,
+  el pipeline se degrupa sin avisar.
+
+### 8. `main.py` corre 8 celdas, no 9
+- Falta `C3_DATA_QUALITY` como celda (sí se importa). **Sin efectos a nivel de
+  módulo → no rompe nada**, pero el mapa de `AGENTS.md` miente.
+- El runner reporta "Celdas ejecutadas: 3" cuando corrieron 8.
+
+### 9. C2: "Sin backups previos" + nombre de archivo equivocado
+- El auto-restore **nunca ha tenido nada que restaurar**. Si mañana corrompés la DB,
+  no hay de dónde recuperar.
+- La nota operativa apunta a `GEM5_INSTITUTIONAL_VAULT.db`, que no existe
+  (el real es `vault_v2.1.db`).
 
 ---
 
 ## 🟡 INFRAESTRUCTURA
 
-### 6. Backup externo de la DB  ← **PRIORIDAD #1**
-- `data\\vault_v2.1.db` (907 señales) y `.env`.
+### 10. Backup externo de la DB  ← **PRIORIDAD #1**
+- `data\\vault_v2.1.db` (914 señales) y `.env`.
 - Es lo único que **no** se recupera de GitHub.
-- Copiar a Drive / disco externo. Verificar que abre bien.
-
-### 7. `rescore_umbral.py` v2
-- La v1 re-scoreó placeholders (`ms_v2 = 0`) → falsos positivos.
-- La v2 tiene que clasificar cada señal en **reconstruible / no reconstruible**
-  (auto-validación 2) y re-scorear **solo las 128 reconstruibles** de 877.
-- Debe abortar si la auto-validación 1 no da ≥90%, y reportar el corte temporal
-  (¿hay señales posteriores a la existencia del v2 sin score? eso sí sería un bug).
-- Ver `AGENTS.md` §5.1 y §5.2.
+- Copiar a Drive. Verificar que abre bien.
 
 ---
 
@@ -621,22 +740,23 @@ PENDIENTES_MD = """# PENDIENTES — MACRO2.1
 
 - **Eliminar los cripto del universo** → descartado. Se mantienen los 12.
 - **Filtro v2 con pocas señales** → se resuelve con acumulación de datos. Ojo:
-  solo 128 señales son reconstruibles (58 con `ms_v2 >= 2`, de las cuales 20 son
-  FUERTE). Con 20 señales cualquier comparación de HR es ruido.
-- **MACRO2 (producción en Render)** → **DATA FREEZE**. Ninguna corrección de
-  esta lista se toca ahí hasta que se valide en MACRO2.1.
+  solo **111 señales tienen score v2 real** (58 con `ms_v2 >= 2`, de las cuales 20
+  son FUERTE). Con 20 señales cualquier comparación de HR es ruido.
+- **MACRO2 (producción en Render)** → **DATA FREEZE**.
 
 ---
 
 ## ❓ PREGUNTAS ABIERTAS (sin respuesta del usuario)
 
-1. ¿Los 4 archivos "Nivel C" se borran o se quedan?
-   (`evaluar_nube.py` 15 KB, `test_telegram.py` 22 KB,
-   `verificar_progreso.bat` 2.5 KB, `diagnostico_bat.py` 6.6 KB)
-2. ¿La DB de producción (Turso) usa las mismas 22 tablas que la local?
-3. ¿`main.py` ejecuta las celdas en el mismo orden que el runner de Render?
-4. ¿El `scheduler.py` local y el de Render comparten código o están duplicados?
-5. ¿El ZIP de `docs/investigaciones/` contiene algo que no esté en los .txt?
+1. **¿Qué cambió el 2026-10-19 en el pipeline?** (despliegue v7.9.3 / cambio de
+   ventana / cambio en C3_MACRO / cambio de mercado). Define si H-10 es
+   artefacto de despliegue o de diseño.
+2. **¿Por qué el `bias` 1D/4H/1H sale `N/A`?** (el motivo está en `logs_v2.1\\*.log`)
+3. ¿Los 4 archivos "Nivel C" se borran o se quedan?
+4. ¿La DB de producción (Turso) usa las mismas 22 tablas que la local?
+5. ¿`main.py` ejecuta las celdas en el mismo orden que el runner de Render?
+6. ¿El `scheduler.py` local y el de Render comparten código o están duplicados?
+7. ¿El ZIP de `docs/investigaciones/` contiene algo que no esté en los .txt?
 """
 
 

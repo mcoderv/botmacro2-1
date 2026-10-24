@@ -368,6 +368,7 @@ def check_docs():
         ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
         ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
         ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
+        ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
     ]
     faltan = [d for d, _ in adrs if not (RAIZ / d).exists()]
     if faltan:
