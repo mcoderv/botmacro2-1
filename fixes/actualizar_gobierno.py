@@ -592,7 +592,7 @@ PF 4.43" NO es evidencia.
 ## 5. Qué chequear primero en la próxima sesión
 
 1. `python verificar.py` → tiene que dar 19 ok / 0 fallas.
-2. `python git\estado.py` → leer el "SIGUIENTE PASO" del `ESTADO.md`.
+2. `python git\\estado.py` → leer el "SIGUIENTE PASO" del `ESTADO.md`.
 3. `AGENTS.md` §5.1, §5.1.b y §5.1.c — son los hallazgos de hoy.
 4. Si tocás el v2: leer `AGENTS.md` §5.1.b ANTES de comparar etiquetas.
 
