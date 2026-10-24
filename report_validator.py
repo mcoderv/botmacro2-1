@@ -197,13 +197,23 @@ def calcular_metricas_ventana(
     avg_loss = abs(np.mean([p for p in pnls if p < 0])) if any(p < 0 for p in pnls) else 0.0
     expectancy = (win_rate * avg_win) - ((1 - win_rate) * avg_loss)
 
-    # Equity Curve y Max Drawdown
-    equity_curve = np.cumsum(pnls).tolist()
-    if equity_curve:
-        peak = np.maximum.accumulate(equity_curve)
-        drawdown = peak - np.array(equity_curve)
-        max_drawdown = float(np.max(drawdown))
+    # ── H-15: curva de capital COMPUESTA (base 100) ──
+    # np.cumsum(pnls) NO es una curva de capital: es una suma aritmetica de
+    # porcentajes. Con ~900 senales el "drawdown" puede superar 100% (se vio
+    # 270.88%) sin que exista tal perdida. Con compounding el Max DD siempre
+    # cae entre 0% y 100%.  OJO: la curva ahora es un INDICE DE CAPITAL base
+    # 100 -> revisar la etiqueta del eje Y del grafico (se reporta al final).
+    if pnls:
+        _pnl_arr = np.array(pnls, dtype=float)
+        _equity = np.cumprod(1.0 + _pnl_arr / 100.0)          # indice de capital, base 1.0
+        _peak = np.maximum.accumulate(_equity)
+        max_drawdown = float(np.max((1.0 - _equity / _peak) * 100.0))
+        # La curva se expone en PnL% (lo que el reporte ya espera: columna
+        # "PnL acumulado", color por signo, tooltip en %). El Max DD de arriba
+        # se calcula sobre el indice de capital, no sobre esta serie.
+        equity_curve = ((_equity - 1.0) * 100.0).tolist()
     else:
+        equity_curve = []
         max_drawdown = 0.0
 
     return {

@@ -252,12 +252,13 @@ CENTRAL_PARAMS: Dict[str, Any] = {
     },
 
     # ── VALIDACIÓN CUANTITATIVA ──
+    # H-12: el umbral ADF NO vive aqui. La fuente unica es
+    #   CENTRAL_PARAMS["macro"]["ADF_P_VALUE_THRESHOLD"] (= 0.05, ADR 002).
     "validation": {
         "FFD_WALKFORWARD": True,
         "FFD_IN_SAMPLE_WARNING": True,
-        # "ADF_P_VALUE_THRESHOLD" se movio a la seccion "macro" (ADR 002).
         "MIN_TRADES_FOR_WALKFORWARD": 100,
-        "PURGED_EMBARGO": True,
+        "PURGED_EMBARGO": True
     },
 
     # ── BACKTEST OVERRIDES ──
@@ -894,6 +895,10 @@ _monitor = CENTRAL_PARAMS.get("monitor", {})
 _dq = CENTRAL_PARAMS.get("data_quality", {})
 _val = CENTRAL_PARAMS.get("validation", {})
 _all_assets = CENTRAL_PARAMS.get("macro", {}).get("ALL_ASSETS", [])
+# H-12: fuente UNICA del umbral ADF (ADR 002). Antes se leia de
+# `validation.ADF_P_VALUE_THRESHOLD`, que no existe en el JSON -> el banner
+# mostraba None mientras el motor real usaba 0.05.
+_macro_adf_thr = CENTRAL_PARAMS.get("macro", {}).get("ADF_P_VALUE_THRESHOLD", "N/A")
 
 print(f"\n{_C}{'═' * 70}{_RST}")
 print(f"{_C}🦅 mercabot_qwen | CELDA 1.5: CENTRAL_PARAMS v2.8 (local){_RST}")
@@ -934,7 +939,7 @@ print(
 )
 print(
     f"   • FFD_WALKFORWARD: {_val.get('FFD_WALKFORWARD')} | "
-    f"ADF_THR: {_val.get('ADF_P_VALUE_THRESHOLD')} | "
+    f"ADF_THR: {_macro_adf_thr} | "
     f"MIN_TRADES_WF: {_val.get('MIN_TRADES_FOR_WALKFORWARD')}"
 )
 

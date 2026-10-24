@@ -557,10 +557,15 @@ def _calculate_metrics() -> None:
                 max_win = max(pnls) if pnls else 0.0
                 max_loss = min(pnls) if pnls else 0.0
                 
-                cumulative = np.cumsum(pnls)
-                peak = np.maximum.accumulate(cumulative)
-                drawdown = peak - cumulative
-                max_dd = float(np.max(drawdown)) if len(drawdown) > 0 else 0.0
+                # ── H-15: curva de capital COMPUESTA (no suma aritmetica de %) --
+                # np.cumsum(pnls) NO es una curva de capital: con ~900 senales el
+                # "drawdown" puede superar 100% (se observo 270.88% en
+                # report_validator.py) sin que exista tal perdida.
+                # Con capital compuesto el Max DD SIEMPRE cae entre 0% y 100%.
+                _pnl_arr = np.array(pnls, dtype=float)
+                _equity = np.cumprod(1.0 + _pnl_arr / 100.0)
+                _peak = np.maximum.accumulate(_equity)
+                max_dd = float(np.max((1.0 - _equity / _peak) * 100.0)) if len(_equity) > 0 else 0.0
                 
                 _conn.execute(
                     """
