@@ -6,6 +6,30 @@
 
 ---
 
+## 0. QUÉ ES (Y QUÉ NO ES) ESTE PROYECTO
+
+**MACRO2.1 NO ES UN BOT DE TRADING.** Es un **predictor + validador** de tendencia
+macro. NO abre posiciones, NO tiene SL ni TP, NO calcula P&L de una cartera.
+
+| | |
+|---|---|
+| Lo que hace | Calcula `macro_score_v2` (C3), **emite** una señal, y después **valida** si se equivocó (C4, a 4h/8h/24h) |
+| Lo que NO hace | Abrir/cerrar posiciones. SL/TP. Dimensionar. Ejecutar órdenes |
+| Quién ejecuta | **MACRO2** (producción, `botmacro`, capa C7). Congelada. |
+
+**Consecuencia práctica:** cuando el análisis diga "43,8% de las señales tocan
+el SL primero", eso es un diagnóstico de **TIMING** (¿cuándo se movió el precio?),
+**no** un P&L perdido. No existe tal cosa como "SL" en este repo.
+La ejecución con SL dinámico ATR que propone el GEM es de **MACRO2 (C7)**,
+no de MACRO2.1.
+
+**Y el score v2 no discrimina por cobertura, no por fórmula:** el score SÍ
+ordena bien dentro de cada etiqueta (a 24h: FUERTE HR 93,8% > MODERADA 77,8%
+> RUIDO 65,3%). El problema es que solo el **9,4%** de las señales son
+FUERTE/MODERADA (ver H-9).
+
+---
+
 ## 1. CONTACTO
 
 - Soy **vibe coder**: no sé programar. Delego todo el código a IA.
@@ -166,7 +190,8 @@ aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal.
   inútil: es que no hay historia con el umbral viejo Y score v2 a la vez.
   **Necesita ~30 días más de datos para evaluarse.**
 
-**Herramienta: `python analisisescore_umbral_v2.py`** (reconstruye el score
+**Herramienta: `python analisis
+`rescore_umbral_v2.py`** (reconstruye el score
 sin tocar la DB, con auto-validaciones y corte temporal).
 
 ### 5.3 Lo que YA está hecho — no lo rehagas
@@ -178,6 +203,9 @@ sin tocar la DB, con auto-validaciones y corte temporal).
 | Umbral ADF unificado en 0.05 | ✅ **APLICADO** (ADR 002, commit `5361b4f`). Fuente única: `CENTRAL_PARAMS["macro"]`. |
 | Carpetas de backup `backups_v2.1` | ✅ Arreglado (H-3) en el mismo commit. |
 | Sin Docker en 2.1 | ✅ Decidido (ADR 003). `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `start.sh` y `litestream.yml` fueron borrados del clon local. **Producción (`botmacro`) los sigue teniendo.** |
+| **Max DD con capital compuesto** | ✅ **ADR 004** (H-15). Antes `np.cumsum` (suma aritmética de %) daba DD de 270% — imposible. Ahora `np.cumprod` sobre índice base 1.0. El DD **siempre cae entre 0% y 100%**. Si ves DD > 100%, es un bug. |
+| **Fuente única del umbral ADF** | ✅ **H-12** (implementación del ADR 002). El 0.02 huérfano salió del literal `validation`, de `val_defaults` y del fallback de C3_MACRO. El banner lee la fuente real. |
+| **Ventana operativa configurable** | ✅ **ADR 006** (H-17). La ventana sale del JSON (`ventana_operativa`), no de constantes. `python ventana.py --ver / --continuo / --inicio X --fin Y`. Los resúmenes de Telegram ya no están atrapados dentro del `if not en_ventana()`. |
 
 ### 5.4 Lo que el pipeline hace MAL y hay que saber
 
@@ -194,7 +222,15 @@ sin tocar la DB, con auto-validaciones y corte temporal).
   entonces sigue siendo un solo disco. Es el único recurso del proyecto que
   no se recupera de GitHub.
 
-### 5.5 El régimen de mercado y `ms_v2` no se hablan
+### 5.4.b Bugs de métrica conocidos (NO los re-descubrir)
+
+| # | Bug | Dónde | Efecto | Estado |
+|---|---|---|---|---|
+| **H-13** | `senales_metricas` **no agrega por `calidad_senal_v2`** | `C4_SENIAL_VALIDATOR` | Las métricas por etiqueta salen de la escala **legacy** (14/8/4), que es inalcanzable porque `macro_score` máximo real es 6 | ⬜ Pendiente |
+| **H-14** | `_get_price_at_time()` usa `ORDER BY ABS(timestamp_unix - ?) ASC LIMIT 1` | `C4_SENIAL_VALIDATOR` | Puede tomar el precio **posterior** al horizonte. Medido: 472 de 914 señales (52%) cambian de PnL, pero el sesgo neto en HR/PF es **< 1%** ⇒ los números se sostienen, el método no | ⬜ Pendiente (fix: `WHERE timestamp_unix <= ? ORDER BY timestamp_unix DESC LIMIT 1`) |
+| **H-16** | "ganancia" significa 2 cosas: `hit_rate`/`wins`/`losses` usan `p > ±0.05%`; `profit_factor` (C4) y `avg_win`/`expectancy` usan `p > 0` | C4 + `report_validator` | Inconsistencia real, pero medida: **impacto < 1% en PF** ⇒ **diferido**, no aplicado | ⏸️ Diferido (ADR 004) |
+
+### 5.5 El r
 
 - `C3_5_REGIME_ENGINE.py` corre el ADF **sobre niveles**.
 - `C3_MACRO_local.py` corre el ADF **sobre residuales FFD** (otro test).
@@ -203,6 +239,36 @@ sin tocar la DB, con auto-validaciones y corte temporal).
 - Decisión pendiente (ADR 001 / pending). **No los "unifiques" sin un ADR.**
 
 ---
+
+### 5.6 La asimetría LONG/SHORT es el hallazgo MÁS SÓLIDO (no lo percas)
+
+**MACRO2.1 hace más señales SHORT que LONG, y las SHORT funcionan mejor.**
+Confirmado por **3 métodos independientes** (n=443 LONG / 471 SHORT):
+
+| Método | LONG | SHORT |
+|---|---|---|
+| PF a 24h | **0,50** | **1,28** |
+| MFE/MAE real | MFE +0,84% vs MAE 2,46% ⇒ **payoff −2,9:1** | MFE +2,84% vs MAE 1,62% ⇒ **1,75x** |
+| Movimiento contrario primero | **54,0%** | 34,3% |
+
+**Interpretación correcta:** el 54% de "SL primero" en LONG es un dato de
+**timing** (el precio se movió en contra antes que a favor), **no** de P&L.
+⇒ **ADR 005 (caja simétrica) PROPUESTO**, no aplicado.
+
+**Ojo:** esto **NO lo arregla ningún umbral** (el PF no depende del break-even).
+Es microestructura o lógica de entrada. Copiar el patrón de los que ganan
+(`xyz:SILVER` PF 3,22 · `xyz:GOLD` PF 2,64) vale más que recalibrar umbrales.
+
+### 5.7 El timing tiene look-ahead PARCIAL (no lo uses como feature todavía)
+
+El timing actual se calcula sobre la trayectoria **completa** hasta el horizonte
+⇒ correlaciona con el PnL final por construcción. No es 100% tautológico
+(FAVOR a 24h tiene HR 67,2%, no 100%), pero la prueba limpia es **timing
+temprano (1h) con PnL medido desde t+1h**. Falta el flag `--timing-h`.
+
+**Aviso metodológico (obligatorio):** la distribución de etiquetas cambió por
+completo el 19/10 (H-10). **Nunca comparar HR/PF entre etiquetas sin cortar por
+día o por ventana.**
 
 ## 6. MAPA DEL PROYECTO
 
@@ -224,7 +290,7 @@ sin tocar la DB, con auto-validaciones y corte temporal).
 |---|---|
 | `main.py` | Runner de celdas |
 | `scheduler.py` / `scheduler.bat` | Scheduler (local; en Render corre el de producción) |
-| `ventana.py` | Ventana operativa 08:00-17:00 Caracas |
+| `ventana.py` | **Ventana operativa CONFIGURABLE** (JSON `ventana_operativa`). `python ventana.py --ver` / `--continuo` / `--inicio X --fin Y` |
 | `iniciar_macro21.bat` | Lanzador local |
 | `reporter.py` / `report_validator.py` | Reportes HTML/JSON |
 
@@ -236,7 +302,7 @@ sin tocar la DB, con auto-validaciones y corte temporal).
 | `fixes/` | Scripts de patch, uno por intervención. Todos con `--deshacer`. |
 | `analisis/` | Scripts de análisis de datos (post-mortem, MAE/MFE, re-score) |
 | `config/CONSOLIDADO/central_params.json` | ⭐ Config real en disco (la que se usa) |
-| `data/vault_v2.1.db` | ⭐ La DB. 907 señales (877 resueltas a 24h). **No tocar, no versionar** |
+(902 resueltas a 24h). 914 señales
 
 ### Docs
 | Archivo | Qué es |
@@ -266,6 +332,7 @@ sin tocar la DB, con auto-validaciones y corte temporal).
 | `RESOLUTION_WINDOWS_HOURS` | 4, 8, 24 | C4 | `C4_SENIAL_VALIDATOR.py` (hardcoded) |
 | `SCORE_V2_FUERTE` / `MODERADA` | 4.0 / 2.0 | C4 | `C4_SENIAL_VALIDATOR.py` (hardcoded) |
 | `ALL_ASSETS` | 12 activos | C1_5, C3_MACRO | `CENTRAL_PARAMS["macro"]` |
+| `ventana_operativa` | MODO + HORA_INICIO/FIN | `ventana.py`, `scheduler.py` | `config/CONSOLIDADO/central_params.json` → `CENTRAL_PARAMS["ventana_operativa"]` |
 
 **Regla de ADF:** el valor tiene que estar en `CENTRAL_PARAMS["macro"]` y
 **todos** lo leen de ahí. `python verificar.py` compara C3_5 vs C3_MACRO vs el

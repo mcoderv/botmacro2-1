@@ -57,3 +57,39 @@ Donde:
 - `docs/spec-ms-v2.md` §4 (Validación estadística).
 - Ley Fundamental de la Gestión Activa (Grinold & Kahn) sobre la necesidad de muestras independientes por estrategia/activo.
 - **Decisión del usuario (2026-10-21):** Mantener los 12 activos en lugar de reducir a 2.
+
+---
+
+## ACTUALIZACIÓN 2026-10-24 — k medido sobre datos reales
+
+El valor de **k** dejó de ser una estimación cualitativa. Medido sobre las
+**914 señales** (902 resueltas a 24h), con la dispersión de los retornos
+absolutos por señal:
+
+| | σ por señal |
+|---|---|
+| mediana | **1,1458 %** |
+| mínimo | 0,318 % |
+| máximo | 3,014 % |
+
+El umbral fijo actual es `BREAKEVEN_THRESHOLD_PCT = 0.05`.
+
+> **k = 0,05 / 1,1458 = 0,0436σ ≈ 0,044σ**
+
+Es decir: el umbral actual es **22× más severo en el activo más volátil**
+(0,05 / 0,318 = 0,157σ) que en el menos volátil (0,05 / 3,014 = 0,017σ).
+El problema de "sesgo por volatilidad" que justificaba este ADR **queda
+confirmado con números**.
+
+**Recordatorio importante (medido el mismo día):**
+`profit_factor` en `C4_SENIAL_VALIDATOR` se calcula con `p > 0` / `p < 0`,
+**sin** el umbral de break-even. Y unificar la definición de "ganancia" mueve
+el PF en **< 1%** (H-16, medido). Por lo tanto:
+
+> **Implementar k×σ mueve el HR, pero NO el PF.**
+> No resuelve la asimetría LONG/SHORT (PF 0,50 vs 1,28). Eso es el **ADR 005**.
+
+**Estado de la decisión:** la fórmula queda **justificada**, pero la
+implementación sigue **pendiente de decisión explícita** del usuario
+(¿se implementa o se pospone?). La asimetría LONG/SHORT tiene prioridad
+mayor porque es la que mueve el PF.

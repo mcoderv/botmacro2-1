@@ -1,7 +1,7 @@
 # HANDOFF — MACRO2.1
 
 > **Se reescribe en CADA cierre de sesión.** Es el archivo que reemplaza
-> a los chats viejos que venías guardando a mano.
+> a los chats viejos que venís guardando a mano.
 >
 > Cuando cambies de IA, el paquete de traspaso es:
 > `AGENTS.md` (auto) + `ESTADO.md` + `HANDOFF.md` + `docs/PENDIENTES.md`
@@ -10,9 +10,9 @@
 
 ```
 Fecha    : 2026-10-24
-Sesion   : 3
+Sesion   : 4
 Repo     : botmacro2-1 (desarrollo)  —  NUNCA botmacro (produccion congelada)
-Commit   : 23efea4
+Commit   : a78726b (H-17) + el commit de este gobierno
 DB       : 914 señales (902 resueltas a 24h)
 ```
 
@@ -20,64 +20,86 @@ DB       : 914 señales (902 resueltas a 24h)
 
 ## 1. Qué hice en esta sesión
 
-- **Docker eliminado de MACRO2.1** (ADR 003): `Dockerfile`, `docker-compose.yml`,
-  `.dockerignore`, `start.sh`, `litestream.yml`. **Producción (`botmacro`) intacta.**
-- **`docs/` reordenada**: `docs/INFORME_MACRO2.1.md` (spec, intacta),
-  `docs/PENDIENTES.md` (tracking), `docs/info/`, `docs/investigaciones/` (+`PLANTILLA.md`),
-  `docs/local/` (fuera de GitHub). `textos/` eliminada.
-- **Gobierno reescrito**: `AGENTS.md`, `ESTADO.md`, `HANDOFF.md`, `docs/PENDIENTES.md`
-  + ADR 003. `verificar.py` ahora chequea los 4 ADRs.
-- **`rescore_umbral.py` v2**: el v1 re-scoreó placeholders (ms_v2 = 0) y dio falsos
-  positivos. La v2 clasifica reconstruible / no reconstruible, re-scorea solo las
-  reconstruibles, aborta si la auto-validación 1 no da ≥90%, y reporta el corte temporal.
-- **Pipeline verificado de punta a punta**: `python main.py` corre las 8 celdas sin
-  excepciones y registró +7 señales (907 → 914).
-- **Backup local de la DB** en `Desktop\MACRO2.1_BACKUP\` (falta Drive).
+### A. ADR 004 — Max DD con capital compuesto (H-15) + fuente única del ADF (H-12)
+- `report_validator.py` y `C4_SENIAL_VALIDATOR._calculate_metrics()` usaban
+  `np.cumsum(pnls)` (suma aritmética de %) ⇒ Max DD de **270,88%**, imposible.
+  Ahora `np.cumprod` sobre índice base 1.0 ⇒ **siempre entre 0% y 100%**.
+- La curva que consume el reporte se expone en **PnL%** sobre el capital
+  compuesto (`((_equity - 1.0) * 100.0)`): antes mostraba "+87,432%" en verde
+  cuando era **−12,568%** de pérdida (unidad equivocada + signo invertido).
+- **Medido en la DB real:** 4h DD 83,94%→**58,21%** · 8h 137,25%→**75,80%** ·
+  24h 270,74%→**94,06%**. El PF se movió **< 1%** ⇒ H-16 queda **diferido**.
+- **H-12:** el 0.02 huérfano del umbral ADF salió del literal `validation`, de
+  `val_defaults` y del fallback de C3_MACRO. El banner lee la fuente real.
+
+### B. ADR 006 — Ventana operativa configurable (H-17)
+- La ventana sale del JSON (`CENTRAL_PARAMS["ventana_operativa"]`), no de
+  constantes en 3 archivos. **NO** se importa `C1_5_PARAM_local` desde
+  `ventana.py` (al importarse reescribe ese JSON).
+- Nuevos modos: `VENTANA` (rango horario) y `CONTINUO` (24/7). Soporta
+  **cruce de medianoche** (p.ej. 20:00→04:00) y `DIAS_SEMANA`.
+- CLI: `python ventana.py --ver / --continuo / --inicio X --fin Y / --dias ... / --intervalo N`.
+  La duración **no** tiene que ser múltiplo de 4h (solo avisa).
+- **Bug corregido (H-17):** el bloque de resúmenes de Telegram estaba
+  **dentro** de `if not en_ventana():` ⇒ en 24/7 el resumen de las 17:00 nunca
+  se enviaba y las banderas nunca se reseteaban a medianoche. En el modo
+  VENTANA 8-17, el **resumen de las 8:30 AM nunca se enviaba**.
+- Ventana restaurada a **8-17** (el default del script era 8-16 y quitaba 1h).
+
+### C. Análisis de timing y MAE/MFE reales (`analisis/analisis_timing_real.py`)
+- **Timing (914 señales):** FAVOR 363 / CONTRA 512 / NEUTRO 39.
+  HR por timing a 24h: FAVOR **67,2%** (PF 3,24) vs CONTRA **27,5%** (PF 0,26).
+  A 4h: FAVOR 54,0% vs CONTRA 18,8%. A 8h: 53,4% vs 16,6%.
+- **Bug del timing 100% CONTRA diagnosticado y corregido:** 908 de 914 señales
+  tienen un snapshot con `ts == ts_emision` exacto ⇒ `dt=0` ⇒ el movimiento 0
+  cumplía ambos criterios ⇒ el desempate daba CONTRA. Fix: excluir `dt <= 0`
+  + `favor == contra → NEUTRO`.
+- **MAE/MFE reales (902 señales):** LONG MFE +0,84% / MAE 2,46% ⇒ payoff
+  **−2,9:1**; SHORT MFE +2,84% / MAE 1,62% ⇒ **1,75x**. movement contrario
+  primero: LONG 54,0% vs SHORT 34,3%.
+- **σ por señal:** mediana **1,1458%**, rango 0,318%–3,014% ⇒ el umbral fijo
+  0,05% ≡ **k = 0,044σ** (22× más severo en el activo más volátil).
+  **⇒ ADR 001 queda justificado con números.**
+- **H-14 medido:** 472 de 914 señales (52%) cambian de PnL con la corrección,
+  pero el sesgo neto en HR/PF es **< 1%** ⇒ los números se sostienen.
+- **La resolución de 8h es inservible hoy:** lag mediano **4,03h** y
+  **735/914 señales con lag > 1h** (la ventana 8-17 no tiene snapshots a
+  las 20:00). **Con 24/7 el lag baja a ~21 min.**
+
+### D. Gobierno
+- `AGENTS.md`: §0 (MACRO2.1 NO es un bot de trading), §5.4.b (H-13/14/16),
+  §5.6 (asimetría), §5.7 (aviso de look-ahead), ADR 004/005/006, ventana
+  configurable, fixes de formato, 914 señales.
+- `ESTADO.md`, `HANDOFF.md`, `docs/PENDIENTES.md`: reescritos.
+- **ADR 005** (caja simétrica) PROPUESTO · **ADR 006** (ventana) ACEPTADO ·
+  ADR 001 append con k = 0,044σ.
 
 ---
 
 ## 2. Los hallazgos importantes (léelos antes de tocar el score)
 
-### 2.1 El ADR 002 es INMEDIBLE con los datos actuales
+### 2.1 MACRO2.1 NO es un bot de trading
+Calcula score, emite señal, valida. **No abre posiciones, no tiene SL ni TP.**
+El "43,8% toca SL primero" del GEM es de **MACRO2 (C7, producción)**. En 2.1
+esa cifra es **timing**, no P&L.
 
-- **0 señales cambian de etiqueta** al pasar de 0.02 a 0.05.
-- Motivo: de las 10 que cambian de rama, 9 son placeholders y 1 ya estaba en 0.05.
-  **Solo 1 señal se generó con el umbral nuevo.**
-- No significa que el ADR sea inútil: significa que **no hay historia con umbral
-  viejo Y score v2 a la vez**. Necesita ~30 días más de datos.
+### 2.2 El score v2 SÍ discrimina — el problema es la COBERTURA
+A 24h: FUERTE FAVOR HR **93,8%** (PF 25,65) · MODERADA **77,8%** · RUIDO
+**65,3%**. Pero solo **86 de 914 señales (9,4%)** son FUERTE o MODERADA.
+**H-9 manda.** Recalibrar umbrales sobre un score sin multi-TF es calibrar
+sobre ruido.
 
-### 2.2 El `ms_v2` opera con dos inputs degradados (H-9)
+### 2.3 La asimetría LONG/SHORT es el hallazgo más sólido
+3 métodos independientes (ver `AGENTS.md` §5.6). **ADR 005 propuesto.**
 
-1. **`s_mtf` = 0 en 7 de 12 activos.** El bias 1D/4H/1H sale `N/A`.
-2. **La rama momentum casi nunca se activa.** `P-v4.2` < 0.001 en los 12 activos de
-   la última corrida; en el histórico **856 de 877 señales tienen p < 0.02**.
+### 2.4 H-10 sigue feroz (confound temporal)
+21/10 HR 84,4% PF 20,05 · 23/10 HR 16,7% · 18/10 HR 25,9% PF 0,229.
+**Un solo día mueve el PF de 0,23 a 20,05.** Nunca comparar etiquetas sin
+cortar por día.
 
-→ El score v2 es siempre `0.5·poc + 1.5·caja + 1.5·fvg + 0.5·rs + 0 + d`.
-El flujo (`rs`), que es el componente que mejor predice la dirección, pesa **0.5**
-en vez de 2.0.
-
-**Consecuencia medida:** `(poc=±1, rs=±2, caja+fvg=∓1)` → `s_base = 0 EXACTO` en
-estacionario y `±4` en momentum. Esos breakouts con flujo fuerte quedan con
-`ms_v2 = 0` → etiqueta RUIDO. Hecho de fórmula, verificable sin datos.
-
-### 2.3 Las etiquetas NO son comparables entre sí (H-10)
-
-La distribución cambió por completo el 19/10: 0 FUERTE → 1 → 9 → 10.
-**Comparar HR/PF entre etiquetas = comparar días distintos.** El "RUIDO tiene
-PF 4.43" NO es evidencia.
-
-**Siempre cortar por día (o por ventana) antes de comparar etiquetas.**
-
-### 2.4 Cuántas señales tienen score v2 REAL: 111 (no 129)
-
-| Grupo | n |
-|---|---|
-| `ms_v2 >= 2` (FUERTE 20 + MODERADA 38) | 58 |
-| `ms_v2 < 2` coherente | 53 |
-| Placeholders casualmente coherentes (13-18/10) | 18 ⚠️ NO son score real |
-| Placeholders incoherentes | 748 |
-
-**Con 111 señales, cualquier corte por etiqueta es ruido.**
+### 2.5 El timing actual tiene look-ahead parcial
+Se calcula sobre la trayectoria completa hasta el horizonte. La prueba limpia
+es **timing temprano (1h) con PnL medido desde t+1h** (`--timing-h`, falta).
 
 ---
 
@@ -85,49 +107,43 @@ PF 4.43" NO es evidencia.
 
 | No hice | Por qué |
 |---|---|
-| Arreglar el `s_mtf = 0` / la rama del `ms_v2` | Es un cambio al scoring → necesita ADR, y el diagnóstico del `N/A` no está cerrado. |
-| Métricas por etiqueta dentro de cada día | Es el próximo corte, pero con n=5-28 por celda va a ser ruido. Primero el diagnóstico. |
-| `calidad_senal_v3` (etiquetas 14/8/4) | Es sobre el `macro_score` **legacy**, otro problema. |
-| ADR 001 (k×σ) | Mueve el HR, no el PF. Decidir si vale. |
-| Max DD de `report_validator.py` | Confirmado que `C4` lo calcula bien; el bug está aislado en `report_validator.py`. Hace falta el archivo. |
-| Ventana 04:00-16:00 | Changes el régimen de muestreo → invalidaría la comparabilidad otra vez. Coordinar con H-10. |
+| Activar el 24/7 | Depende de si el hosting es free o pago. **Decisión del usuario.** |
+| Arreglar `s_mtf = 0` / la rama del `ms_v2` | Es un cambio al scoring ⇒ necesita ADR, y el diagnóstico del `N/A` no está cerrado. |
+| Mover el timing a 1h (`--timing-h`) | Requiere v3 del script de análisis. |
+| H-13 / H-14 / H-16 | Impacto medido bajo (< 1% en PF). Van después del diagnóstico de H-9. |
+| ADR 001 (k×σ) implementado | La fórmula está justificada (k = 0,044σ) pero el PF no depende del break-even ⇒ no mueve el PF. |
 | Matar los 5 fallbacks silenciosos | Toca 4 módulos. Sesión propia. |
+| Actualizar `verificar.py` a 6 ADRs | Requiere ver el archivo. Pendiente. |
 | Backup a Drive | **Es una acción manual tuya.** Es la prioridad #1 y no la puedo hacer yo. |
 
 ---
 
 ## 4. Qué creo que está frágil (opinión sin filtros)
 
-1. **El score v2 no puede discriminar** (H-9). Sin el término multi-timeframe y
-   siempre en la misma rama, es ruido con nombre bonito. **Arreglar esto tiene
-   más impacto que recalibrar cualquier umbral.**
+1. **El score v2 no puede discriminar** (H-9). Arreglar esto tiene más impacto
+   que recalibrar cualquier umbral.
 2. **Cualquier análisis del v2 sobre las 877 señales es basura.** El grupo real
-   son 111 (3 días). Y aun esas están confundidas por fecha.
-3. **Los 5 fallbacks silenciosos** siguen siendo el riesgo #1 latente. Hoy no
-  aroni (verificado línea por línea), pero el día que uno se dispare, el
-   pipeline se degrupa y no dice nada.
-4. **`main.py` corre 8 celdas, no 9**, y el runner reporta "Celdas ejecutadas: 3".
-   Cosmético, pero el mapa de `AGENTS.md` miente.
-5. **El auto-restore nunca se probó**: C2 dice "Sin backups previos". Si mañana
-   corrompés la DB, no hay de dónde restaurar.
-6. **LONG pierde, SHORT gana** (PF 0.50 vs 1.28). Y dentro de los cripto, BTC
-   PF 0.30 y SP500 PF 0.28. Eso no lo arregla ningún umbral: es microestructura
-   o lógica de entrada. `xyz:SILVER` (PF 3.22) y `xyz:GOLD` (2.64) sí funcionan.
-   **Copiar el patrón de los que ganan vale más que recalibrar umbrales.**
+   son 111 (3 días), y aun esas están confundidas por fecha.
+3. **Los 5 fallbacks silenciosos** siguen siendo el riesgo #1 latente.
+4. **La ventana de 8h hoy no sirve** (lag mediano 4,03h). Con 24/7 se arregla
+   sola; con 8-17 no.
+5. **El auto-restore nunca se probó**: C2 dice "Sin backups previos".
+6. **LONG pierde, SHORT gana.** Y dentro de los cripto, BTC PF 0.30 y SP500
+   PF 0.28. Eso no lo arregla ningún umbral.
 7. **Cero tests.** `verificar.py` es el primer paso, no el final.
 
 ---
 
 ## 5. Qué chequear primero en la próxima sesión
 
-1. `python verificar.py` → tiene que dar 19 ok / 0 fallas.
-2. `python git\estado.py` → leer el "SIGUIENTE PASO" del `ESTADO.md`.
-3. `AGENTS.md` §5.1, §5.1.b y §5.1.c — son los hallazgos de hoy.
-4. Si tocás el v2: leer `AGENTS.md` §5.1.b ANTES de comparar etiquetas.
+1. `python verificar.py` ⇒ tiene que dar **19 ok / 0 fallas**.
+2. `python git\estado.py` ⇒ leer el "SIGUIENTE PASO" del `ESTADO.md`.
+3. `AGENTS.md` §0, §5.1.b, §5.1.c, §5.6 ⇒ los hallazgos de hoy.
+4. Si tocás el v2: leer `AGENTS.md` §5.1.b **ANTES** de comparar etiquetas.
 
 ---
 
-## 6. Cómo verificar que no rompí nada
+## 6. Cómo verificar que no rompiste nada
 
 ```cmd
 python verificar.py
@@ -141,13 +157,15 @@ solo toca lo que el ADR dice que tiene que tocar.
 
 ## 7. Cosas pendientes de confirmación (preguntas abiertas)
 
-- **¿Qué cambió el 2026-10-19 en el pipeline?** (desplegue de v7.9.3 / cambio
-  de ventana / cambio en C3_MACRO / cambio de mercado). Define si H-10 es un
+- **¿Render free o de pago?** Define si el 24/7 se activa ya. (Si es free y
+  el proceso se cae, corré el bot en local: los 30 días para el OOS del 21/11
+  se collecting igual.)
+- **¿Qué cambió el 2026-10-19 en el pipeline?** (despliegue v7.9.3 / cambio de
+  ventana / cambio en C3_MACRO / cambio de mercado). Define si H-10 es un
   artefacto de despliegue o de diseño.
-- **¿Por qué el `bias` 1D/4H/1H sale `N/A`?** El motivo está en
-  `logs_v2.1\*.log` (`no_data_or_too_few` / `INSUFFICIENT` / `exception:`).
+- **¿Por qué el `bias` 1D/4H/1H sale `N/A`?** (el motivo está en
+  `logs_v2.1\*.log`).
 - ¿Los 4 archivos "Nivel C" se borran o se quedan?
 - ¿La DB de producción (Turso) usa las mismas 22 tablas que la local?
 - ¿`main.py` ejecuta las celdas en el mismo orden que el runner de Render?
 - ¿El `scheduler.py` local y el de Render comparten código o están duplicados?
-- ¿El ZIP de `docs/investigaciones/` contiene algo que no esté en los .txt?
