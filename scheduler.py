@@ -47,6 +47,7 @@ try:
         en_ventana,
         segundos_hasta_proximo_ciclo,
         descripcion_ventana,
+        _resumen_ventana,
     )
     VENTANA_OK = True
 except ImportError as e:
@@ -60,6 +61,7 @@ except ImportError as e:
     def en_ventana(_hora=None): return True
     def segundos_hasta_proximo_ciclo(): return INTERVALO_SEGUNDOS
     def descripcion_ventana(): return "Modo 24/7 (sin ventana.py)"
+    def _resumen_ventana(): return "Ventana CONTINUA 24/7"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. CONFIGURACIÓN
@@ -691,7 +693,7 @@ def main() -> int:
     logger.info("mercabot_qwen | SCHEDULER LOCAL v2.0")
     logger.info("=" * 70)
     logger.info(f"Intervalo: {INTERVALO_SEGUNDOS // 60} minutos ({INTERVALO_SEGUNDOS}s)")
-    logger.info(f"Ventana: {VENTANA_INICIO:02d}:00-{VENTANA_FIN:02d}:00 ({TZ_NAME})")
+    logger.info(f"Ventana: {_resumen_ventana()} ({TZ_NAME})")
     logger.info(f"Pipeline: {PIPELINE_CMD}")
     logger.info(f"Timeout: {PIPELINE_TIMEOUT_SEGUNDOS}s | Reintentos: {PIPELINE_REINTENTOS}")
     logger.info(f"Log file: {LOG_FILE}")
@@ -710,28 +712,33 @@ def main() -> int:
     ciclo = 0
     
     while not _shutdown.is_set():
+        # ── H-17: resúmenes diarios SIEMPRE (no solo fuera de ventana) ──
+        # Antes este bloque estaba dentro de `if not en_ventana():`, así que
+        # en modo CONTINUO (24/7) el resumen de Telegram nunca se enviaba y
+        # las banderas nunca se reseteaban a la medianoche.
+        ahora_dt = ahora_caracas()
+        hora_actual = ahora_dt.hour
+        minuto_actual = ahora_dt.minute
+
+        # Resetear banderas a la medianoche
+        if hora_actual == 0 and minuto_actual < 15:
+            _resumen_enviado_manana = False
+            _resumen_enviado_tarde = False
+
+        # Enviar resumen matutino (8:30 AM)
+        if hora_actual == 8 and 30 <= minuto_actual < 45 and not _resumen_enviado_manana:
+            enviar_resumen_diario_telegram(periodo="manana")
+
+        # Enviar resumen vespertino (5 PM)
+        if 17 <= hora_actual < 18 and not _resumen_enviado_tarde:
+            enviar_resumen_diario_telegram(periodo="tarde")
+
         if not en_ventana():
             espera = segundos_hasta_proximo_ciclo()
             horas = espera // 3600
             minutos = (espera % 3600) // 60
             
-            # 🚀 Enviar resumen según la hora (8:30 AM o 5 PM Caracas)
-            ahora_dt = ahora_caracas()
-            hora_actual = ahora_dt.hour
-            minuto_actual = ahora_dt.minute
-            
-            # Resetear banderas a la medianoche
-            if hora_actual == 0 and minuto_actual < 15:
-                _resumen_enviado_manana = False
-                _resumen_enviado_tarde = False
-            
-            # Enviar resumen matutino (8:30 AM)
-            if hora_actual == 8 and 30 <= minuto_actual < 45 and not _resumen_enviado_manana:
-                enviar_resumen_diario_telegram(periodo="manana")
-            
-            # Enviar resumen vespertino (5 PM)
-            if 17 <= hora_actual < 18 and not _resumen_enviado_tarde:
-                enviar_resumen_diario_telegram(periodo="tarde")
+            # (H-17) el bloque de resumenes diarios se movio arriba del while
             
             logger.info(
                 f"⏸️  Fuera de ventana ({TZ_NAME}). Durmiendo {horas}h {minutos}m hasta {VENTANA_INICIO:02d}:00"

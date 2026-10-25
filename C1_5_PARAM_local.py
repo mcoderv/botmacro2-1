@@ -234,6 +234,21 @@ CENTRAL_PARAMS: Dict[str, Any] = {
         "ADF_P_VALUE_THRESHOLD": 0.05,
     },
 
+    # ──────────────────────────────────────────────────────────────
+    # VENTANA OPERATIVA (H-17) — configurable desde
+    # config/CONSOLIDADO/central_params.json  ->  ventana_operativa
+    # MODO CONTINUO = 24/7.  MODO VENTANA = solo entre HORA_INICIO
+    # y HORA_FIN (puede cruzar la medianoche).
+    # ──────────────────────────────────────────────────────────────
+    "ventana_operativa": {
+        "MODO": "VENTANA",
+        "HORA_INICIO": 8,
+        "HORA_FIN": 17,
+        "INTERVALO_SEGUNDOS": 900,
+        "DIAS_SEMANA": [0, 1, 2, 3, 4, 5, 6],
+        "TZ": "America/Caracas"
+    },
+
     # ── BACKUP ──
     "backup": {
         "INTERVAL_SEG": 300,
