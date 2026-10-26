@@ -29,6 +29,7 @@
 | 15 | **Ventana operativa configurable** (VENTANA/CONTINUO, cruce de medianoche, días, CLI) + **resúmenes de Telegram fuera del `if not en_ventana()`** (H-17) | **ADR 006** |
 | 16 | Análisis de timing real (914 señales) + MAE/MFE reales + σ por señal | `analisis/analisis_timing_real.py` |
 | 17 | **ADR 005 (caja simétrica) PROPUESTO** + ADR 001 con k = 0,044σ medido | `decisiones/` |
+| 18 | **H-10 cerrado**: causa del cambio del 19/10 identificada (1er deploy a Render + v7.9.3 ⇒ `ms_v2` real) + **H-20** (16,2% de señales fuera de la ventana) | `analisis/diagnostico_h10_h18.py` |
 
 ---
 
@@ -49,11 +50,46 @@
   (C) piso al `rs` en la rama estacionario.
 - **Ojo:** `AGENTS.md` §5.1.c
 
-### 2. El score v2 no se puede evaluar todavía (H-10)
+### 2. ✅ H-10 CERRADO — la causa era el deploy, no el mercado
+- **Qué cambió el 19/10/2026:** ese día fue el **primer deploy a Render** (chat del
+  19/10, logs: *"Sin backup previo en R2 (primer deploy)"*). Simultaneó:
+  1. **v7.9.3** → `macro_score_v2` pasa de placeholder `0.0` a **score real**.
+  2. El bot pasó de **local** a **Render** (y Render aplica la ventana 8-17).
+- **La ventana NO fue el cambio:** la distribución horaria real de la DB muestra
+  que las 674 señales anteriores al 19/10 ya estaban casi todas **dentro de
+  08-17** (solo 9 de 674, 1,3%, fuera, todas a las 17h).
+- **Hallazgo NUEVO (H-20):** desde el 19/10, **39 de 240 señales (16,2%) se
+  emitieron FUERA de 08-17** (19:00, 20:00, 21:00) ⇒ **la ventana no se respeta
+  al 100%** (retrasos del scheduler o proceso local en paralelo).
+- **Consecuencia:** el 13-18/10 y el 19/10+ son **dos poblaciones distintas**
+  (sin score v2 vs con score v2). **No se mezclan.** Para el OOS (T_0 = 22/10)
+  solo cuentan las señales desde el 19/10.
+- **Herramienta:** `python analisis\diagnostico_h10_h18.py` (schema + distribución
+  horaria + cómo persiste C4 las resoluciones).
 - **Problema:** la distribución de etiquetas cambió por completo el 19/10
   (0 FUERTE → 1 → 9 → 10). Comparar HR/PF entre etiquetas = comparar días distintos.
 - **Pendiente:** (a) saber qué cambió el 19/10; (b) medir por día antes de comparar.
 - **Herramienta:** `python analisis\rescore_umbral_v2.py` (ya corta por día y por subgrupo).
+
+### 2.b H-18 — Ventanas de resolución configurables (ADR 007, PROPUESTO)
+- **Problema:** `RESOLUTION_WINDOWS_HOURS = [4, 8, 24]` hardcoded en
+  `C4_SENIAL_VALIDATOR.py:56`. Con 3 cortes no se ve la trayectoria de una
+  señal ⇒ **no se puede medir el timing temprano** (que es lo que mata el
+  look-ahead del análisis actual).
+- **Propuesta:** `[4, 8, 12, 16, 20, 24]` (6 cortes, cada 4h hasta las 24h),
+  leído de `CENTRAL_PARAMS["validation"]["RESOLUTION_WINDOWS_HOURS"]`.
+- **Impacto REAL (medido el 24/10):** las **métricas** (`senales_metricas`) ya
+  son genéricas (`ventana TEXT` + `f"{ventana}h"`) ✅ pero **`senales_validadas`
+  tiene columnas FIJAS**: `precio/pnl_pct/resultado/hit/resuelto_4h|8h|24h`
+  = 15 columnas ⇒ **6 ventanas = +25 columnas y una migración de schema.**
+- **El schema-less del proyecto lo hace posible** (migraciones aditivas,
+  idempotentes, documentadas en el banner de C2) — pero hay que hacerlo bien.
+- **Ojo:** el flag `estado='RESUELTA'` se setea cuando resuelve la ventana de
+  24h (línea 497) ⇒ con 6 ventanas seguiría mandando la última. Correcto.
+- **Sin backfill:** las 914 señales actuales SOLO tienen 4/8/24. Los snapshots
+  de precio viejos ya no existen ⇒ **12/16/20 arrancan en cero desde el día
+  que se active.**
+- **Decisión pendiente del usuario:** ¿6 ventanas o se quedan en 3?
 
 ### 3. Confirmar/activar el 24/7 (ADR 006)
 - **Decisión pendiente del usuario:** ¿Render free o de pago?
@@ -148,11 +184,8 @@
 ## ❓ PREGUNTAS ABIERTAS (sin respuesta del usuario)
 
 1. **¿Render free o de pago?** (define si el 24/7 se activa ya)
-2. **¿Qué cambió el 2026-10-19 en el pipeline?** (despliegue v7.9.3 / cambio de
-   ventana / cambio en C3_MACRO / cambio de mercado). Define si H-10 es
-   artefacto de despliegue o de diseño.
-3. **¿Por qué el `bias` 1D/4H/1H sale `N/A`?** (el motivo está en `logs_v2.1\*.log`)
-4. ¿Los 4 archivos "Nivel C" se borran o se quedan?
-5. ¿La DB de producción (Turso) usa las mismas 22 tablas que la local?
-6. ¿`main.py` ejecuta las celdas en el mismo orden que el runner de Render?
-7. ¿El `scheduler.py` local y el de Render comparten código o están duplicados?
+2. **¿Por qué el `bias` 1D/4H/1H sale `N/A`?** (el motivo está en `logs_v2.1\*.log`)
+3. ¿Los 4 archivos "Nivel C" se borran o se quedan?
+4. ¿La DB de producción (Turso) usa las mismas 23 tablas que la local?
+5. ¿`main.py` ejecuta las celdas en el mismo orden que el runner de Render?
+6. ¿El `scheduler.py` local y el de Render comparten código o están duplicados?

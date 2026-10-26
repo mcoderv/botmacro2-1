@@ -28,7 +28,7 @@ DB          : 914 señales (902 resueltas a 24h)
 - [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso
 - [x] **Sin Docker en 2.1** (ADR 003) — producción intacta
 - [x] **`docs/` ordenada** — `docs/local/` fuera de GitHub, `docs/LEEME.md` con las reglas
-- [x] **Backup local de la DB** en `Desktop\MACRO2.1_BACKUP\` (falta subirlo a Drive)
+- [x] **Backup local de la DB** en `Desktop\\MACRO2.1_BACKUP\\` (falta subirlo a Drive)
 
 ---
 
@@ -62,10 +62,10 @@ FUERTE/MODERADA (H-9).
 
 | # | Riesgo | Impacto | Estado |
 |---|---|---|---|
-| **H-7a** | Backup de la DB solo en un disco | Hecho local (`Desktop\MACRO2.1_BACKUP\`), falta Drive | ❗ **Falta subirlo a Drive** |
+| **H-7a** | Backup de la DB solo en un disco | Hecho local (`Desktop\\MACRO2.1_BACKUP\\`), falta Drive | ❗ **Falta subirlo a Drive** |
 | **H-7b** | 5 imports con fallback silencioso | Una regresión se degrupa sin avisar | ❗ Pendiente → matar fallbacks |
 | **H-9** | **`ms_v2` con `s_mtf = 0`** (bias 1D/4H/1H sale N/A en 7 de 12 activos) y **la rama momentum casi nunca se activa** (856 de 877 señales con p < 0.02) | El score v2 no tiene su componente multi-TF y `rs` (el flujo) pesa 0.5 en vez de 2.0 | 🔤 **NUEVO — MÁXIMA prioridad** |
-| **H-10** | **Las etiquetas NO son comparables entre sí**: la distribución cambió por completo el 19/10 (0 FUERTE → 1 → 9 → 10) | Cualquier HR/PF por etiqueta es un confound temporal | 🔤 **NUEVO** |
+| **H-10** | **Las etiquetas NO son comparables entre sí**: el 19/10 = 1er deploy a Render (v7.9.3 ⇒ `ms_v2` real). Antes no existía score v2 | Cualquier HR/PF por etiqueta es un confound temporal | ✅ **RESUELTO** (24/10: causa identificada) |
 | **H-13** | `senales_metricas` no agrega por `calidad_senal_v2` | Las métricas por etiqueta salen de la escala legacy muerta | ❗ Nuevo → pendiente |
 | **H-14** | `_get_price_at_time` puede tomar precio posterior al horizonte | 52% de señales cambian de PnL, pero sesgo neto < 1% | ❗ Nuevo → pendiente |
 | **H-16** | "ganancia" con 2 definiciones (`p > ±0.05%` vs `p > 0`) | Impacto < 1% en PF | ⏸️ Medido y diferido (ADR 004) |
@@ -80,12 +80,14 @@ FUERTE/MODERADA (H-9).
 | **H-3** | `C0` escribía en `backups/`, `C2` leía de `backups_v2.1/` | El auto-restore no encontraba nada | ✅ RESUELTO |
 | **H-15** | Max DD con `np.cumsum` (suma aritmética) | DD de 270% — imposible | ✅ RESUELTO (ADR 004) |
 | **H-17** | Ventana hardcodeada + resúmenes de Telegram atrapados en `if not en_ventana()` | Sin 24/7 posible; resumen 8:30 AM nunca se enviaba | ✅ RESUELTO (ADR 006) |
+| **H-18** | `RESOLUTION_WINDOWS_HOURS` hardcoded en `[4, 8, 24]` | Sin cortes intermedios: no se puede ver la trayectoria ni medir timing temprano | ⬜ **PROPUESTO** (ADR 007) — el storage de `senales_validadas` es de columnas fijas ⇒ requiere migración |
+| **H-20** | La ventana 8-17 **no se respeta al 100%**: 39 de 240 señales (16,2%) se emitieron fuera de rango | El muestreo real ≠ el configurado ⇒ los cortes por hora no son exactos | ⬜ Nuevo |
 
 ---
 
 ## 🔒 ANTES DE CUALQUIER COSA
 
-**Subí `C:\Users\MD\Desktop\MACRO2.1_BACKUP\` a Drive.** El backup
+**Subí `C:\\Users\\MD\\Desktop\\MACRO2.1_BACKUP\\` a Drive.** El backup
 local ya está hecho (23/10): `vault_v2.1.db` + `env_respaldo.txt`.
 Es lo único del proyecto que **no** se recupera de GitHub.
 
@@ -98,7 +100,7 @@ pasó el 19/10.**
 
 Dos comandos ya pendientes:
 ```
-findstr /i /c:"no_data_or_too_few" /c:"INSUFFICIENT" /c:"no disponible" logs_v2.1\*.log
+findstr /i /c:"no_data_or_too_few" /c:"INSUFFICIENT" /c:"no disponible" logs_v2.1\\*.log
 ```
 → dice si el `N/A` es por pocas velas (Hyperliquid no devolvió 20) o por error.
 
@@ -109,7 +111,7 @@ scheduler, (3) tocaste C3_MACRO / C3_DATA_QUALITY, (4) cambió el mercado.
 **Después:** métricas por etiqueta **dentro de cada día** (elimina el confound de
 H-10) y, con el diagnóstico cerrado, un ADR para la rama del `ms_v2`.
 
-**Herramienta:** `python analisis\rescore_umbral_v2.py` (ya tiene el corte
+**Herramienta:** `python analisis\\rescore_umbral_v2.py` (ya tiene el corte
 por día y el corte por subgrupo).
 
 ---

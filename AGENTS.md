@@ -71,6 +71,11 @@ PASO N — [qué hace en una línea]
   - Si son **independientes o de solo lectura** -> van juntos (1 mensaje = 1 ida y vuelta = menos tokens).
   - Si uno **depende del anterior**, o el anterior puede fallar -> de a uno, con output esperado y que hacer si falla.
   - Nunca mas de 4, y nunca una cadena de 6 pasos para encadenar analisis.
+  - **No mezcles tareas.** Cuando estemos validando un script, un fix o un
+    analisis, ese es el UNICO foco del turno: cerralo (self-test + commit) y
+    recien ahi pasar a responder preguntas abiertas o definir el trabajo
+    siguiente. **No agregues preguntas ni ordenes extra al mismo turno de
+    validacion.**
   - (El "output esperado" y el "pegá la salida" siguen siendo obligatorios.)
 - **Siempre** con output esperado. No sé leer errores.
 - **Siempre** terminá con: *"¿lo corriste? pegá la salida"*.
@@ -333,7 +338,7 @@ día o por ventana.**
 | `TREND_SLOPE_THRESHOLD` | 0.0012 | C3_5 | `C3_5_REGIME_ENGINE.py` (hardcoded) |
 | `STRONG_BIAS_THRESHOLD` | 2 | C3_MACRO | `CENTRAL_PARAMS["macro"]` |
 | `BREAKEVEN_THRESHOLD_PCT` | 0.05 | C4 (solo HR) | `C4_SENIAL_VALIDATOR.py` (hardcoded) |
-| `RESOLUTION_WINDOWS_HOURS` | 4, 8, 24 | C4 | `C4_SENIAL_VALIDATOR.py` (hardcoded) |
+| `RESOLUTION_WINDOWS_HOURS` | 4, 8, 24 | C4 | `C4_SENIAL_VALIDATOR.py` (hardcoded). **ADR 007 PROPUESTO**: hacerlo config `[4,8,12,16,20,24]` (requiere +25 columnas) |
 | `SCORE_V2_FUERTE` / `MODERADA` | 4.0 / 2.0 | C4 | `C4_SENIAL_VALIDATOR.py` (hardcoded) |
 | `ALL_ASSETS` | 12 activos | C1_5, C3_MACRO | `CENTRAL_PARAMS["macro"]` |
 | `ventana_operativa` | MODO + HORA_INICIO/FIN | `ventana.py`, `scheduler.py` | `config/CONSOLIDADO/central_params.json` → `CENTRAL_PARAMS["ventana_operativa"]` |
