@@ -378,3 +378,205 @@ Yo no sé git. Vos me das el comando literal.
   (Render + Docker + Litestream + R2). MACRO2.1 no lo usa.
 - `docs/INFORME_MACRO2.1.md` → la spec de referencia.
 - Todo lo que esté en `botmacro` (producción) hasta que se valide en 2.1.
+
+<!-- H-22:GOB-IQ -->
+---
+
+## 8. LA FÓRMULA REAL DE `macro_score_v2` (verificada en código, 26/10)
+
+> `AGENTS.md` §5.1.c **no reproduce** el score real (0/914). Esta es la versión
+> correcta, leída de `C3_MACRO_local.py` líneas 1484-1661. **Fuente de verdad.**
+
+### 8.1 Semántica del ADF (error histórico, ya corregido)
+
+`p_value_adf < 0.05` significa **ESTACIONARIO**, NO momentum.
+La rama momentum (p ≥ 0.05) se activa cuando la serie **NO** es estacionaria.
+
+### 8.2 Las piezas (`_calculate_ms_v2`, líneas 1588-1661)
+
+| Pieza | Origen | Rango |
+|---|---|---|
+| `poc_score` | POC de la caja | {-1, +1} |
+| `caja_p` | caja amplificada por volumen/ATR (`am` 0.5-2.0, línea 1495-1496) | {-2..+2} |
+| `fvg` | FVG | {-1, 0, +1} |
+| `rs` | **ordinal de `rvd`**, NO el CVD crudo (línea 1487) | {-2,-1,0,+1,+2} |
+| `d` | divergencia POC/FLUJO (ver 8.4) | {−2, 0, +2} |
+
+```python
+# línea 1487  <-- CLAVE: rs es un ORDINAL de rvd, no el CVD crudo
+rs = 2 if rvd > 0.3 else (1 if rvd > 0.1 else (-2 if rvd < -0.3 else (-1 if rvd < -0.1 else 0)))
+```
+
+### 8.3 Las dos ramas
+
+```python
+if is_stationary:      # p_value_adf < 0.05
+    ms_v2 = 0.5*poc + 1.5*caja + 1.5*fvg + 0.5*rs
+else:                  # rama momentum
+    ms_v2 = 0.5*poc + 0.5*caja + 0.5*fvg + 2.0*rs
+
+s_mtf = 0.30*bias_1h + 0.20*bias_4h + 0.15*bias_1d
+d = -2.0 if (poc == 1 and rs <= -1) else (+2.0 if (poc == -1 and rs >= 1) else 0.0)
+macro_score_v2 = round(ms_v2 + s_mtf + d, 2)
+```
+
+### 8.4 `d` NO es degenerado (refutado el 26/10)
+
+`d` se activa cuando `|rvd| > 0.1` **y el POC está del lado opuesto al flujo**
+⇒ es una **divergencia precio/flujo real**, con umbral FIJO (sin calibrar).
+**No se elimina.** (Una revisión externa lo marcó como degenerado por leer el
+nombre de la variable `score_desglose["cvd_crud"]`, que es engañoso.)
+
+### 8.5 `score_desglose` real (líneas 1544-1552)
+
+```
+poc · caja · caja_raw · atr_multiplier · fvg · cvd_crud(=rs ordinal) · rvd_ultimo
+```
+
+### 8.6 Dos rutas silenciosas que devuelven 0.0
+
+- línea 1603-1605: `if not isinstance(desglose, dict): return 0.0`
+- línea 1659-1661: `except(...): logger.debug(...); return 0.0`
+
+### 8.7 El score LEGACY (el que tiene el sesgo)
+
+```python
+# línea 1500
+ms = poc_score + caja_p + fvg + rs          # pesos 1,1,1,1
+# línea 1502-1510
+if abs(ms) >= STRONG_BIAS_THRESHOLD and rs == 0:  bv, bi = "RANGO", "NOISE"
+```
+
+`STRONG_BIAS_THRESHOLD = 2` (línea 260).
+**⇒ El filtro real de emisión es `|ms| >= 2` Y `rs != 0` ⇔ `|rvd| > 0.1`.**
+**⇒ Y como `rs` pesa 1, `rs = ±2` (rvd > 0.3) ya alcanza el umbral solo
+⇒ en la práctica el filtro es "`rvd` > 0,3" (o < −0,3).**
+
+**⇒ `bias_visual` (BULL/BEAR/RANGO) y el tipo de señal (LONG/SHORT) salen del
+MISMO número `ms`. Por eso coinciden en el 100% de las señales.**
+
+---
+
+## 9. EL FILTRO DE RÉGIMEN NO FUNCIONA (H-22, 26/10)
+
+```python
+# C3_MACRO_local.py 1901-1925
+p42 = 1.0     # default
+p50 = 1.0     # default
+try:
+    p42, i42, s42, sp42 = await asyncio.to_thread(calcular_residuos_v42, df1)
+    p50, i50, s50, sp50, dopt, cff = await asyncio.to_thread(calcular_residuos_v50_ffd, df1)
+except _C3_EXC as exc:
+    logger.warning(f"C3 ADF/FFD fallback {coin}: {exc}")
+# línea 2331
+dual = "si" if (p42 <= _T_ADF_THR and p50 <= _T_ADF_THR) else "no"
+```
+
+**⇒ Los `p_value_adf = 1.0` EXACTOS (648 de 914 filas = 71%) NO son un p-value:
+son el DEFAULT de la línea 1901 cuando la función lanza excepción.**
+**⇒ En el 71% de las señales NO SE CORRIÓ NINGÚN TEST DE RÉGIMEN.**
+
+### 9.1 Consecuencia fatal para el análisis
+
+> "El score v2 se calcula sólo en régimen estacionario fuerte (p<0,001)" → **FALSO**.
+> Es "en los casos donde el ADF **NO falló** y además dio p<0,001".
+
+**⇒ Las señales con score real son un SUBMUESTRO SELECCIONADO POR ÉXITO DEL TEST.**
+**⇒ NO se puede "activar/desactivar" el score a posteriori.**
+**⇒ El OOS tiene que ser PROSPECTIVO: emitir siempre, registrar el score, decidir después.**
+
+### 9.2 Regla para código nuevo
+
+**Un test que falla NO puede dejar un valor por defecto indistinguible de un
+resultado.** Si el ADF falla ⇒ `p_value_adf = NULL` + `regimen_test_ok = 0`.
+Nunca `1.0`. (ADR 008)
+
+---
+
+## 10. AFIRMACIONES PROHIBIDAS (la lista negativa del gobierno)
+
+**Si una de estas aparece en un análisis, en un chat o en un commit, está mal.
+No se acepta sin volver a la fuente.**
+
+1. ❌ **"El `macro_score_v2` tiene poder predictivo."** — No lo tiene demostrado.
+   ρ(ms2, pnl24) = +0,119 dentro de RANGE. NO-GO cerrado el 26/10.
+2. ❌ **"El sesgo multi-TF no funciona."** — FALSO. `gem_macro_snapshot` da
+   N/A sólo 5,6% (1D), 5,8% (4H), 0% (15m). Funciona.
+3. ❌ **"El score se calcula en régimen estacionario fuerte."** — FALSO.
+   Se calcula donde el test NO FALLÓ (71% de las veces no corrió). Ver §9.
+4. ❌ **"El score v2 está contaminado por la escala del volumen."** — FALSO.
+   `caja_p` ya se normaliza por ATR (`am` 0.5-2.0) y `rs` es un ordinal acotado.
+   El score ES comparable entre activos.
+5. ❌ **"El término `d` es degenerado / hay que eliminarlo."** — FALSO.
+   Es una divergencia precio/flujo real con umbral fijo sin calibrar.
+6. ❌ **"El score v2 es una regresión por usar `cvd_crud` en vez de `rvd_ultimo`."**
+   — FALSO: `rs` YA es un ordinal de `rvd`. El problema es otro: el v2 sube el
+   peso de caja/fvg y baja el del flujo, que es lo único con evidencia.
+7. ❌ **"MACRO2.1 es un bot de trading."** — NO. Es un **predictor + validador**
+   de tendencia macro. No tiene posiciones, SL ni TP. El MAE/MFE es
+   diagnóstico de TIMING, no P&L.
+8. ❌ **"Se puede comparar HR/PF entre etiquetas o ventanas sin cortar por día."**
+   — Y el grano correcto es el **CICLO**, no el día (25 ciclos para 146 señales;
+   3 ciclos del 20/10 con HR 0% y 3 del 21/10 con HR 85-89%).
+
+---
+
+## 11. PROTOCOLO OOS (Track C) — se escribe ANTES de empezar
+
+**Unidad de evaluación: el CICLO**, no la señal.
+(25 ciclos para 146 señales; la mediana es 6 señales por ciclo ⇒ cortar por día
+mezcla poblaciones distintas.)
+
+| Elemento | Regla |
+|---|---|
+| **N** | nº de señales independientes, escrito ANTES |
+| **M** | nº de días naturales distintos, escrito ANTES |
+| **Benchmark** | aleatorio, con el MISMO perfil de señales (n, tipo, hora) |
+| **Corrección** | Benjamini-Hochberg FDR + **t > 3,0** (Harvey-Liu-Zhu 2016, RFS 29(1):5-68) |
+| **Expectativa** | se compara contra el benchmark, no contra 0 pelado |
+| **T₀** | fecha del deploy con Track A listo |
+| **Ventana** | 30 días |
+| **NO-GO** | si la expectativa neta ≤ 0 ⇒ **CLAUSURA DEFINITIVA del proyecto** |
+
+**⇒ "Si el score v2 predice" NO es la pregunta del OOS.**
+**⇒ La pregunta es: _"¿`rvd` > 0,3 ⇒ el LONG rinde, y el régimen lo modula?"_**
+
+### 11.1 La segunda opinión (26/10) y sus 3 correcciones
+
+La revisión externa concluyó con **NO-GO del score como predictor** y propuso:
+agrupar por ciclo, t>3,0, lista negativa de gobierno y criterio de muerte.
+**Sus 3 errores, ya corregidos:**
+
+- **E1** — mezcló **Caracas con UTC**. La ventana acordada es 04:00-16:00
+  **Caracas (UTC−4)** (confirmado con 3 pares epoch↔fecha de la DB).
+  Su conclusión "migrar a VPS por las 20:00" queda sin base…
+  **PERO:** la franja de las 20:00 Caracas (HR 76%, n=25) está FUERA de la
+  ventana 04:00-16:00, y la de las 08:00 (HR 7,1%, n=14) está DENTRO.
+  ⇒ El recorte quita la mejor franja y conserva la peor ⇒ **ADR 011**.
+- **E2** — usó `cvd_crud` como si fuera el CVD crudo. **Resuelto el 26/10:**
+  `rs` es un ordinal de `rvd` (línea 1487). Mi medición (ρ ≈ 0 con
+  `cvd_raw_ultimo`) era la correcta.
+- **E3** — usó `arXiv:2607.09230` (Jeon, U. Korea, 10-jul-2026) al revés: el
+  paper es real pero trata transiciones de estado L2→1-5 min, NO precios a
+  4h-24h. Su tesis real es **"state-first"** (el estado es el predictor de
+  primer orden; cada capa sólo se acredita si aporta incremental), que sí
+  respalda el NO-GO estructuralmente. **Su diseño (OOS enrollado, event-clustered,
+  blocked permutation tests) es el que hay que montar.**
+
+---
+
+## 12. DÓNDE ESTÁ TODO (mapa para la IA que toma el control)
+
+| Necesito | Archivo |
+|---|---|
+| **Brief completo para una IA nueva** | `docs/RELEVO_IA.md` ← **leé esto primero** |
+| Reglas + mapa del pipeline | `AGENTS.md` (este archivo) |
+| Dónde estoy hoy | `ESTADO.md` |
+| Qué falta | `docs/PENDIENTES.md` |
+| Qué se decidió y por qué | `decisiones/00X-*.md` (8 ADRs) |
+| Spec original (NO editar) | `docs/INFORME_MACRO2.1.md` |
+| Gate antes de commitear | `python verificar.py` |
+| Historial de cambios | `python git/estado.py` · `git/guardar.py` · `git/deshacer.py` |
+
+**⇒ Antes de tocar código: leé `docs/RELEVO_IA.md` + `ESTADO.md` + el ADR
+vigente. Después: escribí el diseño en el chat y ESPERÁ el "ok".**
