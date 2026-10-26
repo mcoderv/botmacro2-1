@@ -1,3 +1,14 @@
+<!-- MACRO2.1:AVISO-INVESTIGACION -->
+> # ⚠️ DOCUMENTO DE TRABAJO — LEÉ ESTO PRIMERO
+>
+> **Este prompt (v3) YA SE EJECUTÓ.** Su resultado es el informe de la segunda
+> opinión, que tiene sus 3 errores corregidos en `docs/RELEVO_IA.md` §9.
+>
+> **La fuente de verdad del proyecto es `docs/RELEVO_IA.md`.**
+> Si te mandan a releer este prompt, no lo re-ejecutes contra el estado actual:
+> el diagnóstico ya está cerrado (H-9) y el plan ya existe (§10).
+
+
 ```text
 [SYSTEM ROLE]
 

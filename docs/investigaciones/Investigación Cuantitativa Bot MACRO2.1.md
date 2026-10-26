@@ -1,3 +1,30 @@
+<!-- MACRO2.1:AVISO-INVESTIGACION -->
+> # ⚠️ DOCUMENTO DE TRABAJO — LEÉ ESTO PRIMERO
+>
+> **Este NO es la fuente de verdad. La fuente de verdad es `docs/RELEVO_IA.md`.**
+>
+> **1) Los números de este informe están ROTOS.** El agente que lo generó
+> convirtió todas las cifras en imágenes (`![][imageN]`). **No hay un solo número
+> confiable acá.** Todos los números fueron reconstruidos desde nuestro propio
+> output y están en `docs/RELEVO_IA.md` §8.
+>
+> **2) Este informe tiene 3 errores ya corregidos** (ver `docs/RELEVO_IA.md` §9):
+> - **E1** — mezcló **Caracas con UTC**. La ventana acordada es 04:00-16:00
+>   **Caracas (UTC−4)** (verificado con 3 pares epoch↔fecha de la DB).
+> - **E2** — tomó `score_desglose["cvd_crud"]` como si fuera el CVD crudo.
+>   **No lo es**: `rs` es un **ordinal de `rvd`** (`C3_MACRO_local.py:1487`).
+>   Por eso ⛔ **el término `d` NO es degenerado** (contra lo que dice acá).
+> - **E3** — usó `arXiv:2607.09230` al revés: el paper trata transiciones de
+>   estado L2→1-5 min, **no** precios a 4h-24h. Su tesis real ("state-first")
+>   sí respalda el NO-GO.
+>
+> **3) Lo que sí acertó** y fue adoptado: NO-GO del score como predictor ·
+> `cycle_id` prioridad 1 · rate limit prioridad 2 · agrupar por ciclo ·
+> Harvey-Liu-Zhu t>3,0 · **lista negativa de gobierno** · **criterio de muerte**.
+>
+> **⇒ NO citá este informe. Citá `docs/RELEVO_IA.md` y los ADR en `decisiones/`.**
+
+
 # **INFORME DE VALIDACIÓN ADVERSARIAL Y AUDITORÍA ECONOMÉTRICA DEL SISTEMA MACRO2.1**
 
 ## **1\. Resumen Ejecutivo**

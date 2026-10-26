@@ -1,3 +1,12 @@
+<!-- MACRO2.1:AVISO-INVESTIGACION -->
+> # ⚠️ DOCUMENTO DE TRABAJO — LEÉ ESTO PRIMERO
+>
+> **La fuente de verdad del proyecto es `docs/RELEVO_IA.md`** (brief completo),
+> seguido de `AGENTS.md` → `ESTADO.md` → `docs/PENDIENTES.md`.
+> Este archivo es material de trabajo, no gobierno. Si contradice al RELEVO,
+> **manda el RELEVO**.
+
+
 # **Evaluación Cuantitativa Adversarial de MACRO2.1: Refutación de Hipótesis, Microestructura en Hyperliquid, Order Flow, Test ADF/KPSS, Rate Limits y Score Macro**
 
 ## **1\. Refutación Adversarial de Hipótesis y Control de Falsos Descubrimientos**

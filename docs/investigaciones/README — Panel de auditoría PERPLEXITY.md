@@ -1,3 +1,12 @@
+<!-- MACRO2.1:AVISO-INVESTIGACION -->
+> # ⚠️ DOCUMENTO DE TRABAJO — LEÉ ESTO PRIMERO
+>
+> **La fuente de verdad del proyecto es `docs/RELEVO_IA.md`** (brief completo),
+> seguido de `AGENTS.md` → `ESTADO.md` → `docs/PENDIENTES.md`.
+> Este archivo es material de trabajo, no gobierno. Si contradice al RELEVO,
+> **manda el RELEVO**.
+
+
 # Panel de auditoría de rendimiento — bot de predicción macro
 
 Panel en Python (Streamlit) que audita la **calidad direccional** de las señales de tu bot:
