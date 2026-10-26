@@ -67,7 +67,11 @@ PASO N — [qué hace en una línea]
 📂 Desde: [carpeta exacta]
 ```
 
-- **UN paso a la vez.** Nunca 3 comandos juntos.
+- **Ritmo: 1 a 4 comandos por turno.**
+  - Si son **independientes o de solo lectura** -> van juntos (1 mensaje = 1 ida y vuelta = menos tokens).
+  - Si uno **depende del anterior**, o el anterior puede fallar -> de a uno, con output esperado y que hacer si falla.
+  - Nunca mas de 4, y nunca una cadena de 6 pasos para encadenar analisis.
+  - (El "output esperado" y el "pegá la salida" siguen siendo obligatorios.)
 - **Siempre** con output esperado. No sé leer errores.
 - **Siempre** terminá con: *"¿lo corriste? pegá la salida"*.
 - Si algo falló, **no me des el siguiente paso** hasta ver la salida.

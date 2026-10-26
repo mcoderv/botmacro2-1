@@ -366,9 +366,9 @@ def check_docs():
         ("decisiones/001-umbral-dinamico-volatilidad-PENDIENTE.md", "ADR 001 (umbral dinamico)"),
         ("decisiones/002-unificar-umbral-ADF.md", "ADR 002 (umbral ADF, con .md)"),
         ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
-        ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
-        ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
-        ("decisiones/003-macro21-local-sin-docker.md", "ADR 003 (local sin Docker)"),
+        ("decisiones/004-curva-de-capital-compuesta.md", "ADR 004 (curva de capital compuesta)"),
+        ("decisiones/005-caja-simetrica-long-short.md", "ADR 005 (caja simetrica LONG/SHORT)"),
+        ("decisiones/006-ventana-operativa-configurable.md", "ADR 006 (ventana configurable)"),
     ]
     faltan = [d for d, _ in adrs if not (RAIZ / d).exists()]
     if faltan:
@@ -384,7 +384,7 @@ def check_docs():
             detalle += " | El 002 existe como '%s'. Renombralo a '002-unificar-umbral-ADF.md'." % cand
         falla("[ADRS] ADRs esperados incompletos", detalle)
     else:
-        ok("[ADRS] Los 4 ADRs estan presentes con nombre correcto")
+        ok("[ADRS] Los 7 ADRs estan presentes con nombre correcto")
 
     # duplicados
     raiz_inf = RAIZ / "INFORME_BOT_MACRO2.1.md"
