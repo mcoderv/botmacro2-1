@@ -230,8 +230,8 @@
     },
     "ventana_operativa": {
       "MODO": "VENTANA",
-      "HORA_INICIO": 8,
-      "HORA_FIN": 17,
+      "HORA_INICIO": 4,
+      "HORA_FIN": 16,
       "INTERVALO_SEGUNDOS": 900,
       "DIAS_SEMANA": [
         0,
