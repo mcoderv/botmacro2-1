@@ -1,0 +1,7 @@
+# Reglas de fin de linea por tipo de archivo.
+# H-25: los .bat con saltos Unix no los interpreta CMD (parte los bloques y
+# ejecuta fragmentos como comandos). Con eol=crlf, git guarda el texto
+# normalizado pero SIEMPRE lo entrega con CRLF, en cualquier maquina y con
+# cualquier configuracion de core.autocrlf.
+*.bat text eol=crlf
+*.cmd text eol=crlf
