@@ -1,15 +1,16 @@
 # ESTADO — MACRO2.1
 
-> **Este archivo se REESCRIBE, no se acumula.** Si tiene más de ~110 líneas, está mal.
+> **Este archivo se REESCRIBE, no se acumula.** Si tiene más de ~120 líneas, está mal.
 > Debe responder "¿dónde estoy?" en 20 segundos.
 > Un ESTADO desactualizado es PEOR que ninguno: miente.
 
 ```
-Actualizado : 2026-10-26
-Commit      : 31e6cd3 (H-18/H-10/H-20 + ADR 007) + commit de gobierno H-22
+Actualizado : 2026-10-27
+Commit      : baf6985 (gate con 13 ADRs) + commit de gobierno H-23
 Repo        : botmacro2-1  (desarrollo, local, SIN Docker) | botmacro = PRODUCCION (congelada)
 FASE        : 2 — intervenciones
-DB          : 914 señales (902 resueltas a 24h) · zona horaria = CARACAS (UTC-4)
+DB          : 914 señales (902 resueltas a 24h) · zona horaria = CARACAS (UTC−4)
+VENTANA     : 08:00-17:00 Caracas  ← la REAL (ver H-23 / E1)
 ```
 
 ---
@@ -24,12 +25,15 @@ DB          : 914 señales (902 resueltas a 24h) · zona horaria = CARACAS (UTC-
 - [x] **ADR 006** — ventana operativa configurable (H-17): VENTANA/CONTINUO, cruce de medianoche, días, CLI
 - [x] **H-3 / H-5** — carpetas `backups_v2.1`/`logs_v2.1` y `_migrar_v28` sobrescribe
 - [x] **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`
-- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso (verifica ADR 000-006)
+- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso · ahora valida los **13 ADRs**
 - [x] **Sin Docker en 2.1** (ADR 003) — producción intacta
 - [x] **H-9 CERRADO** — diagnóstico completo del `macro_score_v2` (5 scripts de análisis)
 - [x] **Zona horaria resuelta** — la DB guarda hora local Caracas (UTC−4), 3 pares epoch↔fecha
-- [x] **Segunda opinión** recibida, revisada y sus 3 errores corregidos (E1/E2/E3)
+- [x] **Segunda opinión** revisada; sus 3 errores corregidos (E1/E2/E3)
 - [x] **Plan de reorientación** escrito (Track A / B / C) — `docs/RELEVO_IA.md` §10
+- [x] **Gobierno H-22** — `AGENTS.md` §8-§12, `ESTADO.md`, `HANDOFF.md`, `PENDIENTES.md`, ADR 008-012
+- [x] **Prueba de adopción (27/10)** — una IA sin contexto leyó el repo y entendió todo;
+      **encontró 5 bugs del gobierno** (§13 de `AGENTS.md`)
 
 ---
 
@@ -54,16 +58,14 @@ movimiento contrario primero (LONG **54,0%** vs SHORT 34,3%) · PF por tipo (0,5
 
 ## 🧭 H-9 CERRADO — QUÉ ES REALMENTE MACRO2.1
 
-**El score v2 NO tiene poder predictivo demostrado (NO-GO).**
+**El score v2 NO tiene poder predictivo demostrado. NO-GO.**
 ρ(ms2, pnl24) = **+0,119** dentro de RANGE. No separa nada.
-
-**Lo que sí se midió (todo verificado contra la DB cruda):**
 
 | Hallazgo | Dato | Dónde |
 |---|---|---|
 | `macro_score_v2 = 0.0` exacto | **768 de 914** = 13/10–19/10 = **PRE-DEPLOY, NO es bug vigente** | `data_quality_emision`=OK en las 768 |
 | Score v2 real | **146** = 19/10–23/10 (4 días) | |
-| El filtro de régimen **NO corrió** | **648 de 914 (71%)** tienen `p=1.0` = el DEFAULT del `except` | C3 líneas 1901-1925 |
+| El filtro de régimen **NO corrió** | **648 de 914 (71%)** con `p=1.0` = el DEFAULT del `except` | C3 líneas 1901-1925 |
 | `p<0,05` significa | **ESTACIONARIO**, no momentum | |
 | `riesgo_regime` real | NEUTRAL 83,4% / RISK_ON 13,0% / RISK_OFF 3,6% | |
 | `bias` real (audit) | RANGO 62,3% / BULL 18,7% / BEAR 18,7% | |
@@ -81,26 +83,47 @@ tendencia macro. Y su sesgo (BULL/BEAR) es el MISMO número que el tipo de seña
 
 ---
 
+## 🔴 LOS 5 HALLAZGOS DE LA RONDA DEL 27/10 (los encontró una IA nueva)
+
+| # | Qué | Gravedad |
+|---|---|---|
+| **E1** | **La ventana real es 08:00-17:00** (`central_params.json` 231-246), no 04:00-16:00. La 4-16 **nunca se aplicó** ⇒ el gobierno mentía | 🔴 Alta |
+| **E2** | **5 archivos leen `data/vault_v2.db`, que no existe** (la real es `vault_v2.1.db`): `scheduler.py:190`, `reporter.py:1012`, `report_validator.py:38`, `validar_gem_macro.py:26`, `test_telegram.py:34` ⇒ leen una DB **vacía** ⇒ el resumen de Telegram de la mañana **nunca se envió** y los reportes salen vacíos. El pipeline C2→C4 **no** está afectado | 🔴 Media (H-12) |
+| **E3** | `AGENTS.md` §5.1.c contradice a §9 ⇒ un patch aditivo dejó secciones viejas que chocan | 🔴 Media |
+| **E4** | `ESTADO.md` declaraba un commit viejo | 🟡 Baja |
+| **E5** | El commit `baf6985` decía "versionar diagnostico_h9 y h10_h18" y no lo hizo (los excluye `diagnostico_*.py`, `.gitignore` línea 34) | ✅ Conocido |
+
+**⇒ ⭐⭐ CONSECUENCIA CRÍTICA: las señales de 19:00-21:00 (fuera de la
+ventana 8-17, bug H-20) son **la franja con el HR más alto medido**
+(20:00 → HR 76%, n=25). ⇒ Si se arregla H-20, **pueden desaparecer.**
+⇒ **El "edge" puede ser un artefacto de un bug de scheduler.**
+⇒ ⇒ **ADR 011 pierde su base** (proponía ampliar a 23:00 "para capturar" esa franja).
+⇒ ⇒ **H-20 sube de "menor" a CRÍTICO.**
+
+---
+
 ## ⚠️ RIESGOS CONOCIDOS
 
 | # | Riesgo | Impacto | Estado |
 |---|---|---|---|
 | **H-7a** | Backup de la DB solo en un disco | Hecho local, **falta Drive** | ❗ **PRIORIDAD #1 (manual)** |
-| **H-22** | **El test de régimen falla en el 71%** y deja `p=1.0` (indistinguible de un resultado) | La muestra de "señales con score" está **seleccionada por éxito del test** | 🔴 **NUEVO —>#1 técnico** |
+| **H-20** | **16,2% de las señales se emiten FUERA de la ventana** (19-21h) | **Puede ser el "edge" medido ⇒ puede desaparecer al arreglarlo** | 🔴 **NUEVO —>#1 técnico** |
+| **E2 / H-12** | 5 scripts leen `data/vault_v2.db` (no existe) | Reportes vacíos; el resumen de la mañana nunca se envió | 🔴 **NUEVO** |
+| **E1** | El gobierno dice una ventana y el código ejecuta otra | La ventana "acordada" nunca se aplicó | 🔴 **NUEVO** |
+| **E3** | `AGENTS.md` §5.1.c vs §9 | Contradicción en el documento que gobierna | 🔴 **NUEVO** |
+| **H-22** | El test de régimen falla en el 71% y deja `p=1.0` | La muestra de "señales con score" está **seleccionada por éxito del test** | 🔴 **>#1 técnico** |
 | **H-9** | `macro_score_v2` sin poder predictivo demostrado | NO-GO cerrado | ✅ **CERRADO (evidencia)** |
 | **H-10** | Las etiquetas no son comparables entre sí (19/10 = 1er deploy) | Confound temporal | ✅ RESUELTO |
-| **H-20** | La ventana no se respeta al 100% (16,2% fuera) | Los cortes por hora no son exactos | ⬜ Nuevo |
-| **H-21** | `en_ventana()` trabaja con **hora entera** | `VENTANA_FIN=16` corta el ciclo de las 16:00; no se puede expresar 03:40/16:20 | 🔴 **NUEVO — bloquea H-18/H-13** |
-| **H-18** | `RESOLUTION_WINDOWS_HOURS=[4,8,24]` hardcoded | Sin cortes intermedios ⇒ no se mide timing temprano | ⬜ PROPUESTO (ADR 007) — default acordado **[4, 24]** |
+| **H-21** | `en_ventana()` trabaja con **hora entera** | `VENTANA_FIN` corta el ciclo de la hora final; no se puede expresar 03:40/17:20 | 🔴 Bloquea H-18/H-13 |
+| **H-18** | `RESOLUTION_WINDOWS_HOURS=[4,8,24]` hardcoded | Sin cortes intermedios ⇒ no se mide timing temprano | ⬜ PROPUESTO (ADR 007) — default **[4, 24]** |
 | **H-13** | `senales_metricas` no agrega por `calidad_senal_v2`; escala legacy 14/8/4 muerta | Métricas por etiqueta salen de una escala inalcanzable | ❗ Pendiente |
 | **H-14** | `_get_price_at_time` puede tomar precio posterior | 52% cambian de PnL, sesgo neto <1% | ❗ Pendiente |
 | **H-16** | "ganancia" con 2 definiciones | Impacto <1% en PF | ⏸️ Medido y diferido (ADR 004) |
 | **H-11** | `main.py` corre 8 celdas, no 9 | Cosmético, el mapa de AGENTS.md miente | ❗ Nuevo |
-| **H-12** | C2 dice "Sin backups previos" ⇒ el auto-restore nunca restauró nada | Nunca probado de verdad | ❗ Nuevo |
-| **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo (≡ k=0,044σ) | Sesga HR (no el PF) | ❗ Pendente → ADR 001 |
+| **H-2** | Dos ADF distintos (niveles C3_5 vs residuales FFD C3) | El régimen no mueve el conmutador | ❗ Pendiente |
+| **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo (≡ k=0,044σ) | Sesga HR (no el PF) | ❗ Pendiente → ADR 001 |
 | **H-6** | `SCORE_ALTA=14`/`MEDIA=8` con `macro_score` máx 6 | Código muerto | ❗ Pendiente |
 | **H-8** | 6 cripto pierden (BTC PF 0,30) mientras TradFi gana | Estructural | ❗ En investigación |
-| **H-2** | Dos ADF distintos (niveles C3_5 vs residuales FFD C3) | El régimen no mueve el conmutador | ❗ Pendiente |
 | **H-7b** | 5 imports con fallback silencioso | Una regresión se degrupa sin avisar | ❗ Pendiente |
 | — | Rate limit de Hyperliquid | 1344 req/min > 1200 ⇒ **429**; ritmo 25-30 → **4-8 corridas/día** | 🔴 **Track A / A1** |
 | — | Logs sobrescritos | 39 líneas ⇒ el motivo de los 648 fallos del ADF se perdió | 🔴 **Track A / A4** |
@@ -109,6 +132,8 @@ tendencia macro. Y su sesgo (BULL/BEAR) es el MISMO número que el tipo de seña
 | — | `duration_seconds` no es duración | No se puede medir el costo por ciclo | 🔴 **Track A / A5** |
 | — | `_classify_signal_quality_v2` usa `abs()` | Etiqueta invertida (RUIDO 71,4% > FUERTE 64,7%) | ⬜ **Track B / B3** |
 | — | `score_desglose["cvd_crud"]` mal nombrado | Ya produjo un error de análisis externo | ⬜ **Track A / A9** |
+| — | `verificar.py` no valida que los `.py` entregados queden versionados | Ya falló 2 veces | ⬜ **Nuevo** |
+| — | `verificar.py` no chequea los ADR 007-012 | Gate parcial | ✅ Resuelto (27/10) |
 
 ---
 
@@ -120,27 +145,32 @@ proyecto que **no** se recupera de GitHub. **`data/` está gitignored.**
 
 ---
 
-## 🎯 SIGUIENTE PASO (Track A, en este orden)
+## 🎯 SIGUIENTE PASO
 
-1. **A1 — Rate limit.** 1344 req/min > 1200 ⇒ 429 ⇒ 4-8 corridas/día.
-   Cache de velas (TTL > 15 min) + WS + backoff + reducir TFs.
-   **Objetivo: 0 × 429 y ≥ 60 corridas/día.**
-2. **A2 — `cycle_id`.** C3.5 debe escribir `zonas["macro_cycle_id"]`.
-   **Objetivo: 100% de match.**
-3. **A3 — `data_quality`.** `zonas["data_quality"]["estado"]` ⇒ no NULL.
-4. **A0 — Test de régimen.** `p=NULL` + `regimen_test_ok` en vez de `p=1.0`.
-   Recalibrar la longitud de ventana del ADF (n ≈ 42 es insuficiente).
-5. **A4 / A5 / A6** — logs acumulativos · `duration_seconds` real ·
-   red de seguridad del score (`logger.warning` + contador).
-6. **A9** — renombrar `score_desglose["cvd_crud"]` → `rs_ordinal`.
-7. **A7 — Ventana** (ADR 011): 19 h (04:00-23:00) = 570-589 h/mes = 76-78% del
-   free tier, y captura la franja de las 20:00 (HR 76%, n=25).
-8. **H-21** (ventana en minutos) → **H-18** (`[4,24]`) → **H-13**.
+**1 · El diagnóstico C0→C4.** Prompt listo en
+`docs/PROMPT_DIAGNOSTICO_C0_C4.md`. Lo ejecuta una IA (o vos con
+`docs/RELEVO_IA.md` como contexto). Reglas: **ninguna corrección sin
+validador**, **si no sabés, investigá en internet y decile al usuario qué
+buscar**, y **ninguna de las 8 afirmaciones prohibidas**.
 
-**⇒ Track C (protocolo OOS) se escribe ANTES de T₀** (ADR 012).
-**⇒ T₀ = fecha del deploy con el Track A listo.**
-**⇒ Track B (B1/B3) se aplica SOLO en T₀, prospectivo. B4 (limpiar el score)
-solo DESPUÉS del veredicto.**
+**2 · Medir el cruce hora × dentro/fuera de la ventana (H-20).**
+Es lo que decide si el "edge" de las 20:00 es real o es el bug H-20.
+Cae dentro del diagnóstico.
+
+**3 · Track A (eficiencia), en este orden** — el diseño de A1 ya está hecho
+(cache con TTL ≥900s · un solo fetch por ciclo compartido · token bucket a
+~600/min con backoff y `Retry-After` · WS con `HL_WS_URL` ya presente en
+CONFIG · auditar timeframes) y su métrica de no-regresión es:
+**requests/min p95 < 600 + la MISMA distribución de señales por activo/hora
+que antes (NO HR/PF: las etiquetas cambian con el tiempo).**
+   1. **A1** rate limit → 2. **A2** `cycle_id` → 3. **A3** `data_quality` →
+   4. **A0** test de régimen → 5. **A4/A5/A6** → 6. **A9** → 7. **H-21** →
+   8. **H-18** → 9. **H-13**
+
+**4 · Track C (protocolo OOS) se escribe ANTES de T₀** (ADR 012).
+**T₀ = fecha del deploy con el Track A listo.**
+**5 · Track B (B1/B3) sólo en T₀, prospectivo. B4 (limpiar el score) sólo
+DESPUÉS del veredicto.**
 
 ---
 
@@ -154,3 +184,4 @@ solo DESPUÉS del veredicto.**
 - **1 a 4 comandos por turno.** Si uno depende del anterior, de a uno.
 - **No mezcles tareas:** cerrar el trabajo en curso antes de abrir el siguiente.
 - **Nunca escribir archivos sin "ok" explícito del usuario.**
+- **Después de un patch aditivo, releer el documento ENTERO** (lección del 27/10).

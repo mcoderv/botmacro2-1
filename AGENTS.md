@@ -1,128 +1,8 @@
-# AGENTS.md — MACRO2.1 (local, experimental)
-
-> Este archivo lo lee la IA en CADA turno. Si es largo, lo skimmea.
-> Mantenelo corto. Lo que la IA puede leer sola en el código, NO va acá.
-> Lo que la IA NO puede adivinar, va acá.
-
----
-
-## 0. QUÉ ES (Y QUÉ NO ES) ESTE PROYECTO
-
-**MACRO2.1 NO ES UN BOT DE TRADING.** Es un **predictor + validador** de tendencia
-macro. NO abre posiciones, NO tiene SL ni TP, NO calcula P&L de una cartera.
-
-| | |
-|---|---|
-| Lo que hace | Calcula `macro_score_v2` (C3), **emite** una señal, y después **valida** si se equivocó (C4, a 4h/8h/24h) |
-| Lo que NO hace | Abrir/cerrar posiciones. SL/TP. Dimensionar. Ejecutar órdenes |
-| Quién ejecuta | **MACRO2** (producción, `botmacro`, capa C7). Congelada. |
-
-**Consecuencia práctica:** cuando el análisis diga "43,8% de las señales tocan
-el SL primero", eso es un diagnóstico de **TIMING** (¿cuándo se movió el precio?),
-**no** un P&L perdido. No existe tal cosa como "SL" en este repo.
-La ejecución con SL dinámico ATR que propone el GEM es de **MACRO2 (C7)**,
-no de MACRO2.1.
-
-**Y el score v2 no discrimina por cobertura, no por fórmula:** el score SÍ
-ordena bien dentro de cada etiqueta (a 24h: FUERTE HR 93,8% > MODERADA 77,8%
-> RUIDO 65,3%). El problema es que solo el **9,4%** de las señales son
-FUERTE/MODERADA (ver H-9).
-
----
-
-## 1. CONTACTO
-
-- Soy **vibe coder**: no sé programar. Delego todo el código a IA.
-- Hablame en **español**, sin jerga. Si usás un término técnico, explicámelo en una línea.
-- **REGLA DURA:** NUNCA edites ni crees archivos sin mi **"ok, crealo"** explícito.
-  Presentá el diseño en el chat primero, esperá el ok, recién ahí escribís.
-- Cuando no estés seguro de algo, decilo ("no sé") en vez de inventar.
-
----
-
-## 2. ENTORNO (obligatorio)
-
-| | |
-|---|---|
-| Sistema | **Windows 10/11 + VS Code**. No asumas Linux ni Mac. |
-| Terminal | **CMD.exe** |
-| ⛔ | **NUNCA uses PowerShell.** Me da problemas. |
-| ⛔ | **NUNCA des comandos bash, ni `curl`/`wget` unix, ni `&&`, ni `;`** |
-| Python | venv activo (`(.venv)` en el prompt). `python` y `pip` funcionan. |
-| Git | Instalado y configurado. **Pero yo no sé git** → nunca digas "hacé un commit", dá el comando literal. |
-| Idioma | Todo en español, **incluidos los mensajes de commit**. |
-| Datasets | Datos de Hyperliquid, 12 activos (6 cripto + 6 TradFi), TZ America/Caracas. |
-| ⛔ | **Sin Docker.** MACRO2.1 corre directo con `python` en Windows. No lo reintroduzcas. |
-| Entrega de archivos | Los archivos van **directo a la carpeta destino** del proyecto (`fixes\`, `analisis\`, etc.). **NO des comandos `copy` desde Descargas.** |
-
-**Formato obligatorio de cada comando que me des:**
-
-```
-PASO N — [qué hace en una línea]
-
-    <comando literal, listo para copiar, CMD>
-
-✅ Deberías ver: [output esperado]
-❌ Si falla: [qué significa + qué te pego]
-📂 Desde: [carpeta exacta]
-```
-
-- **Ritmo: 1 a 4 comandos por turno.**
-  - Si son **independientes o de solo lectura** -> van juntos (1 mensaje = 1 ida y vuelta = menos tokens).
-  - Si uno **depende del anterior**, o el anterior puede fallar -> de a uno, con output esperado y que hacer si falla.
-  - Nunca mas de 4, y nunca una cadena de 6 pasos para encadenar analisis.
-  - **No mezcles tareas.** Cuando estemos validando un script, un fix o un
-    analisis, ese es el UNICO foco del turno: cerralo (self-test + commit) y
-    recien ahi pasar a responder preguntas abiertas o definir el trabajo
-    siguiente. **No agregues preguntas ni ordenes extra al mismo turno de
-    validacion.**
-  - (El "output esperado" y el "pegá la salida" siguen siendo obligatorios.)
-- **Siempre** con output esperado. No sé leer errores.
-- **Siempre** terminá con: *"¿lo corriste? pegá la salida"*.
-- Si algo falló, **no me des el siguiente paso** hasta ver la salida.
-
----
-
-## 3. VERDAD ACTUAL
-
-| Quiero saber... | Leé |
-|---|---|
-| ¿Dónde estamos? ¿Qué sigue? | `ESTADO.md` |
-| ¿Por qué se decidió algo? | `decisiones/` (ADR) |
-| ¿Qué hace cada archivo? | tabla de abajo |
-| ¿Está sano el proyecto? | `python verificar.py` |
-| ¿Qué hice en la sesión anterior? | `HANDOFF.md` |
-| ¿Qué falta? | `docs/PENDIENTES.md` |
-| ¿Dónde va un archivo nuevo? | `docs/LEEME.md` |
-
----
-
-## 4. REGLAS DURAS
-
-1. **Un cambio por sesión.** Una celda por vez. No toques dos módulos juntos.
-2. **Si algo funciona, NO lo toques** sin un ADR que lo justifique.
-3. **Import que falla → que se rompa.** Prohibido degradar en silencio
-   (no `except ImportError: AVAILABLE = False`). Un cambio de firma tiene
-   que romper el arranque, no escondido.
-4. **Un parámetro, UNA ruta de acceso.** Si lo cambiás, cambiás su definición
-   y verificás que TODOS los consumidores lo lean de ahí.
-5. **Después de cada cambio:** `python verificar.py` y pegá la salida.
-   Si hay fallas, no avances.
-6. **Nunca toques** `data/`, `.env`, ni `logs/`.
-7. **Nunca borres** `docs/local/chats/` (los chats viejos que venías guardando
-   a mano) ni commits ya publicados.
-8. **Producción está congelada.** `botmacro` = MACRO2 = Render + Docker + Litestream.
-   No se toca hasta que algo se valide en 2.1. `botmacro2-1` = desarrollo, local, sin Docker.
-9. **No toques `docs/INFORME_MACRO2.1.md`** sin que te lo pida: es la spec de
-   referencia, y el tracking de pendientes vive en `docs/PENDIENTES.md`.
-
----
-
-## 5. HECHOS QUE NO ESTÁN EN EL CÓDIGO
-
-> Esto no se deduce leyendo el repo. Si no está acá, se pierde.
-> Leelo antes de tocar nada.
-
+<!-- H-23:OBSOLETA-5-1-C -->
+> ⚠️ **ESTA SECCION ESTA OBSOLETA (27/10).** No reproduce la formula real
+> del `macro_score_v2` (0/914) y su lectura de la rama momentum esta invertida.
+> **La §8 de este mismo archivo la reemplaza por completo.**
+> No uses esta seccion para nada. El detalle esta en la §13.
 ### 5.1 `macro_score_v2` es RECIENTE — no arregles un bug que no existe
 
 `ms_v2` (el score multi-timeframe) se agregó en **v7.9.3** (desplegado el
@@ -389,6 +269,10 @@ Yo no sé git. Vos me das el comando literal.
 
 ### 8.1 Semántica del ADF (error histórico, ya corregido)
 
+> ⚠️ **Si llegaste desde §5.1.c: esa sección está OBSOLETA.** No reproduce la
+> fórmula real (0/914) y su lectura de la rama momentum está invertida.
+> **La §8 la reemplaza por completo. No uses §5.1.c para nada.**
+
 `p_value_adf < 0.05` significa **ESTACIONARIO**, NO momentum.
 La rama momentum (p ≥ 0.05) se activa cuando la serie **NO** es estacionaria.
 
@@ -547,12 +431,18 @@ La revisión externa concluyó con **NO-GO del score como predictor** y propuso:
 agrupar por ciclo, t>3,0, lista negativa de gobierno y criterio de muerte.
 **Sus 3 errores, ya corregidos:**
 
-- **E1** — mezcló **Caracas con UTC**. La ventana acordada es 04:00-16:00
-  **Caracas (UTC−4)** (confirmado con 3 pares epoch↔fecha de la DB).
+- **E1** — mezcló **Caracas con UTC**. La ventana operativa es **Caracas
+  (UTC−4)** (confirmado con 3 pares epoch↔fecha de la DB).
   Su conclusión "migrar a VPS por las 20:00" queda sin base…
-  **PERO:** la franja de las 20:00 Caracas (HR 76%, n=25) está FUERA de la
-  ventana 04:00-16:00, y la de las 08:00 (HR 7,1%, n=14) está DENTRO.
-  ⇒ El recorte quita la mejor franja y conserva la peor ⇒ **ADR 011**.
+  **🔴 CORREGIDO EL 27/10:** la ventana **REAL** —la que el código ejecuta y la
+  que miden los datos— es **08:00-17:00 Caracas**
+  (`config/CONSOLIDADO/central_params.json` líneas 231-246; confirmado por H-10:
+  674 de 674 señales pre-19/10 dentro de 08-17, las 9 fuera a las 17h).
+  La ventana **04:00-16:00 nunca se aplicó** ⇒ la frase de este documento
+  "la ventana acordada es 04:00-16:00" era **FALSA** y queda corregida.
+  Y el argumento "el recorte quita la mejor franja" queda **invalidado**:
+  las señales de 19:00-21:00 son las **fuera de ventana** (bug H-20), no una
+  franja a capturar ⇒ **ADR 011 pierde su base.** Ver §13.
 - **E2** — usó `cvd_crud` como si fuera el CVD crudo. **Resuelto el 26/10:**
   `rs` es un ordinal de `rvd` (línea 1487). Mi medición (ρ ≈ 0 con
   `cvd_raw_ultimo`) era la correcta.
@@ -580,3 +470,89 @@ agrupar por ciclo, t>3,0, lista negativa de gobierno y criterio de muerte.
 
 **⇒ Antes de tocar código: leé `docs/RELEVO_IA.md` + `ESTADO.md` + el ADR
 vigente. Después: escribí el diseño en el chat y ESPERÁ el "ok".**
+<!-- H-23:RODA-IA-NUEVA -->
+---
+
+## 13. RONDA DEL 27/10 — UNA IA NUEVA ADOPTÓ EL PROYECTO Y ENCONTRÓ 5 BUGS
+
+**Qué se hizo:** una IA sin contexto previo leyó **sólo** el repo
+(`docs/RELEVO_IA.md` → `AGENTS.md` → `ESTADO.md` → `docs/PENDIENTES.md`) y
+respondió un cuestionario de adopción. **Leyó todo bien**: las 8 afirmaciones
+prohibidas textuales y con los números correctos, la pregunta del OOS
+(`rvd` > 0,3), ρ = +0,119, 71% = 648/914, 25 ciclos, HR 0% / 85-89%, A1
+primero, y el diseño del rate limit (caché con TTL, token bucket, backoff con
+`Retry-After`). **No inventó un solo número** — declaró explícitamente lo que
+no midió.
+
+**⇒ El relevo funciona. Y la IA encontró 5 contradicciones que nosotros no
+vimos.** Ése es el valor real de la prueba.
+
+| # | Hallazgo de la IA | Estado |
+|---|---|---|
+| **E1** | La ventana tiene **3 valores**: este doc decía 04:00-16:00, ADR 011 propone 04:00-23:00, y **el JSON en disco dice 08:00-17:00** | 🔴 **REAL.** La real es **8-17**. La 4-16 nunca se aplicó |
+| **E2** | 5 archivos vivos leen `data/vault_v2.db`, que **no existe** (la real es `vault_v2.1.db`): `scheduler.py:190`, `reporter.py:1012`, `report_validator.py:38`, `validar_gem_macro.py:26`, `test_telegram.py:34` | 🔴 **REAL** (es H-12, con más alcance) |
+| **E3** | `AGENTS.md` §5.1.c contradice a §9 (la rama momentum) | 🔴 **REAL** — falla de un patch aditivo sin releer |
+| **E4** | `ESTADO.md` declaraba un commit viejo | 🟡 Real, cosmético |
+| **E5** | El commit `baf6985` decía "versionar diagnostico_h9 y h10_h18" y **no lo hizo** | ✅ Conocido: los excluye `diagnostico_*.py` |
+
+### 13.1 Las 3 consecuencias que cambian el plan
+
+**1) 🔴 H-20 SUBE A CRÍTICO.** El bug "16,2% de las señales se emiten fuera de
+la ventana" (19:00-21:00) coincide **exactamente** con la franja de mayor HR
+medido (20:00 → HR 76%, n=25). ⇒ **Si se arregla H-20, esas señales desaparecen
+y con ellas puede caerse el único "edge" que se había medido.**
+⇒ **El edge de las 20:00 puede ser un artefacto de un bug de scheduler.**
+⇒ Esto hay que MEDIRLO (cruce hora × dentro/fuera de ventana) antes de tocar nada.
+
+**2) ⛔ ADR 011 PIERDE SU BASE.** Proponía "ampliar a 04:00-23:00 para capturar
+la franja de las 20:00" ⇒ eso sería **legalizar un bug**. ADR 011 queda
+PROPUESTO pero **sin justificación** hasta el diagnóstico.
+
+**3) 🔴 H-17 PARCIALMENTE TRABAJO SOBRE CÓDIGO MUERTO.** El resumen de
+Telegram de la mañana (`scheduler.py:190`) lee una DB inexistente ⇒
+`SELECT ... FROM senales_validadas` ⇒ "no such table" ⇒ el `try/except` lo
+traga ⇒ **nunca se envió**. Por eso nadie notó el arreglo de H-17.
+⇒ El pipeline C2→C4 **no** pasa por ahí ⇒ no está afectado.
+⇒ `reporter.py`, `report_validator.py`, `validar_gem_macro.py` y
+`test_telegram.py` leen la misma DB inexistente ⇒ sus reportes están vacíos.
+
+### 13.2 La lección de método (auto-detectada por la IA)
+
+**Un patch ADITIVO sobre un documento que no se releyó entero puede dejar
+secciones que se contradicen.** El self-test verificaba que lo nuevo estuviera,
+**no que no chocara con lo viejo**. ⇒ **Regla nueva: después de un patch
+aditivo, releer el documento ENTERO y buscar contradicciones.**
+
+### 13.3 El circuito que faltaba (detectado por la IA)
+
+Entregar un `.py` ⇒ el usuario lo copia a `analisis/` ⇒ **nadie verifica que
+quedó versionado**. Falló 2 veces (`diagnostico_h9.py`, `diagnostico_h10_h18.py`
+caen en `diagnostico_*.py` del `.gitignore`, línea 34) y no se detectó hasta
+que el `git add` falló. ⇒ **Falta un check en `verificar.py`** que detecte
+`.py` en `analisis/`/`fixes/` que estén ignorados. **Pendiente.**
+
+---
+
+### 13.4 Las 3 reglas del diagnóstico (el aprendizaje de esta ronda)
+
+**1. NINGUNA CORRECCIÓN SIN VALIDADOR.** El validador debe (a) ser ejecutable,
+(b) tener un PASS/FAIL explícito, (c) **fallar con el código viejo** y (d) pasar
+con el nuevo. Si no se puede escribir ese test, la corrección **no se aplica**:
+se reporta como riesgo asumido.
+
+**2. SI NO SABÉS ALGO, INVESTIGALO EN INTERNET** (fuente primaria) y decile al
+usuario qué tiene que buscar, con el formato `PENDIENTE DE INVESTIGACIÓN`.
+No inventes números, ni comportamiento de APIs, ni fuentes.
+
+**3. NINGUNA AFIRMACIÓN DE LAS 8 PROHIBIDAS** (§10) puede repetirse.
+
+---
+
+## 14. EL SIGUIENTE TRABAJO NO ES CÓDIGO: ES EL DIAGNÓSTICO C0→C4
+
+**Prompt listo:** `docs/PROMPT_DIAGNOSTICO_C0_C4.md`
+
+Una IA debe auditar **celda por celda** (C0, C1/C1_5, C2, C2_5, C3, C3_5, C4,
+scheduler, ventana, main) aplicando las **3 reglas de §13.4**.
+
+**⇒ Antes de escribir código: presentá el diseño en el chat y esperá el "ok".**
