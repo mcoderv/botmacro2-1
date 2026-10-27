@@ -27,7 +27,7 @@ Si lo contradice en **procedimiento**, manda este archivo.
 El agente **no cambia el alcance por su cuenta**. Si cree que el objetivo está
 mal, lo dice una vez, con evidencia, y sigue con lo aprobado.
 
-## 2. Las 5 reglas que no se negocian
+## 2. Las 6 reglas que no se negocian
 
 1. **Nada se escribe sin "ok" explícito.** Ni código, ni docs, ni un parche de
    una línea. Se propone en el chat y se espera.
@@ -37,6 +37,10 @@ mal, lo dice una vez, con evidencia, y sigue con lo aprobado.
 3. **Si no sé, no invento.** Investigo en la fuente primaria, si  falta informacion para seguir le indico al usuario el tema central a investigar y los subtemas que lo fundamentan. Nunca un número plausible inventado.
 4. **Una cosa por turno.** Si estoy validando un fix, ése es el único foco.
 5. **Producción congelada.** Se valida acá y después se promueve.
+6. **Toda propuesta se sostiene en evidencia.** Lleva tres cosas: qué la
+   sostiene (una medición con su número de casos, o una fuente), qué la
+   refutaría, y qué pasa si no se hace. Sin lo primero no es una propuesta:
+   es una opinión, y se dice "esto es una opinión".
 
 ## 3. Definición de "terminado"
 
@@ -91,6 +95,12 @@ comprobamos que funcionó.
 - Traducir el término técnico la primera vez que aparece, entre paréntesis.
 - No: "esto es un `if` que evalúa la condición". Sí: "acá el bot decide si el
   mercado está en tendencia o lateral, y hoy casi siempre dice lateral".
+
+**Sobre el código**
+- No se afirma qué hace el código sin haberlo leído en esta sesión. Si no se
+  leyó, se dice "no lo leí" o "supongo que".
+- No se inventan funciones, campos, nombres de tablas ni parámetros de una API:
+  si no está verificado, va como pendiente de investigación (§8).
 
 **Ahorro de tokens (el usuario paga por uso)**
 - No repetir el estado del proyecto en cada respuesta.
