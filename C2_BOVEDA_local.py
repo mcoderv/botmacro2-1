@@ -773,6 +773,59 @@ with _boveda_lock:
         except sqlite3.OperationalError as e:
             logger.warning(f"No se pudo agregar columna macro_score_v2 a gem_macro_snapshot: {e}")
 
+    # ── regime_state / regime_features: columnas del motor ADF v2.0 (H-24) ──
+    # Las dos tablas las crea C3_5 con CREATE TABLE IF NOT EXISTS. Si ya
+    # existian de una version anterior, el CREATE no agrega nada y el INSERT
+    # del motor fallaba en silencio: aviso en el log y dato perdido. Aca se
+    # completan las columnas que faltan. Si la tabla todavia no existe, se
+    # saltea: C3_5 la crea completa.
+    _tablas_reg = {
+        _r[0] for _r in _boveda_conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    _regime_state_new_cols = {
+        "p_value": "REAL",
+        "slope": "REAL",
+        "vol_ratio": "REAL",
+        "is_stationary": "INTEGER",
+        "reason": "TEXT DEFAULT ''",
+    }
+    _regime_features_new_cols = {
+        "p_value": "REAL",
+        "slope": "REAL",
+        "vol_ratio": "REAL",
+    }
+    _reg_migraciones = 0
+    for _tabla_reg, _cols_reg in (
+        ("regime_state", _regime_state_new_cols),
+        ("regime_features", _regime_features_new_cols),
+    ):
+        if _tabla_reg not in _tablas_reg:
+            continue
+        _cols_reg_actuales = {
+            _r[1] for _r in _boveda_conn.execute(f"PRAGMA table_info({_tabla_reg})")
+        }
+        for _col_reg, _tipo_reg in _cols_reg.items():
+            if _col_reg in _cols_reg_actuales:
+                continue
+            try:
+                _boveda_conn.execute(
+                    f"ALTER TABLE {_tabla_reg} ADD COLUMN {_col_reg} {_tipo_reg}"
+                )
+                _reg_migraciones += 1
+            except sqlite3.OperationalError as e:
+                logger.warning(
+                    f"No se pudo agregar columna {_col_reg} a {_tabla_reg}: {e}"
+                )
+
+    if _reg_migraciones > 0:
+        _boveda_conn.commit()
+        logger.info(
+            f"Migración: {_reg_migraciones} columnas del motor de régimen "
+            f"agregadas a regime_state/regime_features"
+        )
+
 # ──────────────────────────────────────────────────────────────────────────────
 # 13. EXPORTAR A GLOBALS
 # ──────────────────────────────────────────────────────────────────────────────
