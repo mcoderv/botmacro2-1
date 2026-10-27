@@ -202,6 +202,28 @@ que depende de eso** (puedo avanzar con el resto).
 - Antes de una sesión larga: checkpoint (`python git\guardar.py "antes de: ..."`).
 - Al cerrar una sesión de trabajo: `HANDOFF.md` actualizado.
 
+### 12.1 Cuándo hay que abrir un chat nuevo
+
+El costo de un chat crece con su largo: **cada pedido reenvía toda la
+conversación**. Pasados ~20 turnos, un turno cuesta más que el trabajo que hace.
+El agente **tiene que avisarlo solo**, sin que el usuario lo pregunte.
+
+**Avisar cuando:**
+- se cerró una unidad de trabajo (cambio aplicado, gate verde, commit hecho);
+- el chat pasó de ~20 turnos, o el agente se nota repitiendo contexto;
+- se pasa a otro tema del proyecto;
+- se leyó un archivo grande que ya no se va a volver a usar.
+
+**Cómo avisarlo** (una línea, al final del turno):
+
+> ✅ Cerrado: <qué>. Conviene abrir chat nuevo: leé `AGENTS.md` y `HANDOFF.md`.
+
+**Antes de cortar: actualizar `HANDOFF.md`.** Si el dato no está ahí, se pierde.
+
+**El chat nuevo arranca** leyendo `AGENTS.md` y `HANDOFF.md`. **No** se re-pega
+el historial ni se escribe "seguí donde quedamos": el estado vive en los
+archivos, no en la conversación.
+
 ---
 
 ## 13. Dónde están las secciones técnicas que vivían acá
