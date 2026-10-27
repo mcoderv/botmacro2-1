@@ -32,6 +32,8 @@ data/
 
 # --- SCRIPTS DE DIAGNÓSTICO TEMPORALES ---
 diagnostico_*.py
+# excepcion: el reporte de estado es una medicion reproducible, no temporal
+!analisis/diagnostico_estado.py
 carp.txt
 *.txt
 !requirements.txt
