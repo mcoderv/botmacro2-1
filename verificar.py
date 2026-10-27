@@ -369,6 +369,12 @@ def check_docs():
         ("decisiones/004-curva-de-capital-compuesta.md", "ADR 004 (curva de capital compuesta)"),
         ("decisiones/005-caja-simetrica-long-short.md", "ADR 005 (caja simetrica LONG/SHORT)"),
         ("decisiones/006-ventana-operativa-configurable.md", "ADR 006 (ventana configurable)"),
+        ("decisiones/007-ventanas-resolucion-configurables.md", "ADR 007 (ventanas de resolucion)"),
+        ("decisiones/008-test-de-regimen-no-puede-dejar-default.md", "ADR 008 (test de regimen sin default)"),
+        ("decisiones/009-congelar-macro-score-v2-y-bias-visual.md", "ADR 009 (congelar score v2 y bias)"),
+        ("decisiones/010-hipotesis-oos-rvd-mayor-03.md", "ADR 010 (hipotesis OOS: rvd > 0,3)"),
+        ("decisiones/011-ventana-operativa-19h-render-free.md", "ADR 011 (ventana 19h en Render free)"),
+        ("decisiones/012-protocolo-oos-prospectivo-con-criterio-de-muerte.md", "ADR 012 (protocolo OOS + criterio de muerte)"),
     ]
     faltan = [d for d, _ in adrs if not (RAIZ / d).exists()]
     if faltan:
@@ -384,7 +390,7 @@ def check_docs():
             detalle += " | El 002 existe como '%s'. Renombralo a '002-unificar-umbral-ADF.md'." % cand
         falla("[ADRS] ADRs esperados incompletos", detalle)
     else:
-        ok("[ADRS] Los 7 ADRs estan presentes con nombre correcto")
+        ok("[ADRS] Los 13 ADRs estan presentes con nombre correcto")
 
     # duplicados
     raiz_inf = RAIZ / "INFORME_BOT_MACRO2.1.md"
