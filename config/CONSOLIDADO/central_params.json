@@ -248,7 +248,7 @@
   "PRESETS": {
     "caos": {
       "name": "caos",
-      "desc": "Mercado caótico — C7 más estricto: protege capital",
+      "desc": "Mercado ca\u00f3tico \u2014 C7 m\u00e1s estricto: protege capital",
       "radar": {
         "MIN_SCORE": 18,
         "Z_SCORE_RUPTURA": 2.0,
@@ -272,7 +272,7 @@
     },
     "rango": {
       "name": "rango",
-      "desc": "Mercado lateral — C7_Hibrido_Wide exacto (validado)",
+      "desc": "Mercado lateral \u2014 C7_Hibrido_Wide exacto (validado)",
       "radar": {
         "MIN_SCORE": 17,
         "Z_SCORE_RUPTURA": 1.8,
@@ -294,7 +294,7 @@
     },
     "tendencia": {
       "name": "tendencia",
-      "desc": "Mercado tendencial — C7 más permisivo: deja correr",
+      "desc": "Mercado tendencial \u2014 C7 m\u00e1s permisivo: deja correr",
       "radar": {
         "MIN_SCORE": 16,
         "Z_SCORE_RUPTURA": 1.5,
@@ -317,9 +317,9 @@
   },
   "_active_preset": {
     "name": "rango",
-    "desc": "Mercado lateral — C7_Hibrido_Wide exacto (validado)",
-    "applied_at": "2026-10-23 21:04:15"
+    "desc": "Mercado lateral \u2014 C7_Hibrido_Wide exacto (validado)",
+    "applied_at": "2026-10-27 11:12:14"
   },
-  "_saved_at": "2026-10-23T21:04:15.510669",
+  "_saved_at": "2026-10-27T11:12:14.222184",
   "_version": "v2.8"
 }

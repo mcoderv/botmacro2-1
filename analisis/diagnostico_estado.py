@@ -46,6 +46,10 @@ def pct(a, b):
 def main():
     import time as _t
     import datetime as _dt
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     print("DIAGNOSTICO MACRO2.1 - solo lectura")
     print("fecha: %s" % _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 

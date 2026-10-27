@@ -46,6 +46,12 @@ def contar():
 
 def main():
     import argparse
+    # La salida del pipeline trae simbolos no-ASCII. Si stdout no puede con
+    # ellos, el script se cae al imprimir. Lo forzamos a tolerante.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     ap = argparse.ArgumentParser()
     ap.add_argument("--dejar", action="store_true",
                     help="No restaurar la base al terminar (deja la prueba en los datos)")
@@ -73,10 +79,15 @@ def main():
     t0 = time.time()
     ok = False
     salida = ""
+    # El pipeline imprime emojis. Al lanzarlo desde aca, su salida va a un pipe
+    # y Python usa cp1252 -> UnicodeEncodeError. Forzamos UTF-8 en el hijo.
+    entorno = dict(os.environ)
+    entorno["PYTHONIOENCODING"] = "utf-8"
+    entorno["PYTHONUTF8"] = "1"
     try:
         p = subprocess.run(
             [sys.executable, "main.py", "--solo-c3"],
-            cwd=RAIZ, capture_output=True, text=True,
+            cwd=RAIZ, capture_output=True, text=True, env=entorno,
             encoding="utf-8", errors="replace", timeout=TIMEOUT,
         )
         dur = time.time() - t0
@@ -90,7 +101,10 @@ def main():
             print("DELTA  : senales=%+d resueltas4h=%+d snapshots=%+d" % (
                 despues[0] - antes[0], despues[1] - antes[1], despues[2] - antes[2]))
         print("")
-        if dur < 300:
+        if not ok:
+            print("VEREDICTO: el pipeline FALLO (codigo %d). No se midio nada." % p.returncode)
+            print("           ver el error en las ultimas lineas de abajo.")
+        elif dur < 300:
             print("VEREDICTO: cabe comodo en 15 min (%.1f min)" % (dur / 60.0))
         elif dur < 600:
             print("VEREDICTO: entra en 15 min pero con poco margen (%.1f min)" % (dur / 60.0))
