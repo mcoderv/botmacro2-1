@@ -118,6 +118,23 @@ comprobamos que funcionó.
 
 Sin relleno. Si no hubo avance, lo digo.
 
+### 5.1 Cómo el usuario me pasa los resultados
+
+El agente **no tiene acceso al entorno del usuario**: no puede correr el bot, ni
+abrir la base, ni ver la pantalla. Todo lo que hay que medir se pide con un
+script que el usuario corre y pega en el chat.
+
+- El script vive en `analisis/` (mediciones) o `fixes/` (cambios). Nunca suelto.
+- Es **solo lectura** salvo que el nombre empiece con `probar_` o `aplicar_`, y
+  en ese caso el agente lo advierte **antes** de darlo y explica qué escribe.
+- Imprime **texto ASCII, corto y autosuficiente**: sin tablas enormes, con un
+  bloque `FLAGS` al final que resuma lo que está mal.
+- El comando se da completo y listo para pegar (§4.1). Se pide **la salida
+  completa**, no un resumen: el agente no puede adivinar las líneas que faltan.
+- Si con esa salida no alcanza, se pide **otra medición**. No se supone.
+- Todo script de diagnóstico lleva en la cabecera: qué mide, para qué sirve y
+  si escribe algo o no.
+
 ## 6. Formato de un hallazgo
 
 ```
