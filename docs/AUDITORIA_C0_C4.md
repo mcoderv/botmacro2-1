@@ -268,3 +268,47 @@ historial. El motivo de los 648 fallos del ADF, si alguna vez se escribió, no e
 **Fase 1: C3 + C3_5.** Es donde está la pregunta del OOS. Entregable: una sección
 por celda con los 5 puntos del encargo, cada corrección con su validador
 discriminante.
+
+---
+
+## Anexo A — Bloques técnicos que vivían en `AGENTS.md`
+
+`AGENTS.md` pasó a ser un acuerdo de **proceso**. Los hechos técnicos que sólo
+existían ahí se preservan acá; el resto ya estaba en `docs/RELEVO_IA.md`
+(fórmula en §9, lista negativa en §11, protocolo OOS en §10, conceptos
+verificados en §15).
+
+### A.1 La ronda del 27/10 (E1–E5)
+
+| # | Hallazgo | Estado |
+|---|---|---|
+| E1 | La ventana tenía 3 valores: AGENTS decía 04–16, ADR 011 proponía 04–23, el JSON decía 08–17 | La real era **08–17**. **ADR 014 fija ahora 04–16** |
+| E2 | 5 archivos vivos leen `data/vault_v2.db` (no existe): `scheduler.py:190`, `reporter.py:1012`, `report_validator.py:38`, `validar_gem_macro.py:26`, `test_telegram.py:34` | **Abierto (P1)** |
+| E3 | `AGENTS §5.1.c` contradecía a `§9` (rama momentum) | Cerrado: §5.1.c eliminada con el AGENTS nuevo |
+| E4 | `ESTADO.md` declaraba un commit viejo | Cerrado |
+| E5 | `baf6985` decía "versionar `diagnostico_h9`/`h10_h18`" y no lo hizo (`.gitignore:34 diagnostico_*.py`) | **Abierto (P2)**: falta el check en `verificar.py` |
+
+### A.2 Bugs de medición conocidos (no re-descubrir)
+
+| # | Bug | Dónde | Estado |
+|---|---|---|---|
+| H-11 | guarda de "señal duplicada" con firma incompatible | C4 | Abierto |
+| H-13 | `senales_metricas` no agrega por `calidad_senal_v2` — **la columna no existe** | C4 | Confirmado en Fase 0 |
+| H-14 | `_get_price_at_time` usa `ORDER BY ABS`: puede tomar precio posterior al horizonte | C4 | Abierto; hueco máximo medido **33,8 h** |
+| H-16 | "ganancia" con dos definiciones (±0,05% vs >0) | C4 + reporter | Diferido (<1% en PF) |
+| H-20 | señales emitidas fuera de ventana | scheduler | Medido: **48/914 (5,3%)**, no 16,2% |
+| H-21 | `en_ventana()` compara hora entera | `ventana.py:120` | Abierto (no afecta a 04–16) |
+
+### A.3 Lo que ya estaba hecho (no rehacer)
+
+`scheduler.py` lee `PORT` · bucket R2 = `mercabot-qwen-db` · umbral ADF único
+(ADR 002) · carpetas `backups_v2.1` · sin Docker (ADR 003) · Max DD con
+`cumprod` (ADR 004) · ventana configurable (ADR 006).
+
+### A.4 Advertencia que no se debe perder: el timing tiene look-ahead parcial
+
+El timing actual (FAVOR / CONTRA / NEUTRO) se calcula sobre la trayectoria
+**completa** hasta el horizonte, así que correlaciona con el PnL final **por
+construcción**. No es 100% tautológico (FAVOR a 24 h tiene HR 67,2%, no 100%),
+pero **no sirve como feature** hasta que se mida temprano: timing a 1 h con PnL
+medido desde t+1 h. Falta el flag `--timing-h` en `analisis/analisis_timing_real.py`.
