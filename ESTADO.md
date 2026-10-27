@@ -5,172 +5,112 @@
 > Un ESTADO desactualizado es PEOR que ninguno: miente.
 
 ```
-Actualizado : 2026-10-27
-Commit      : baf6985 (gate con 13 ADRs) + commit de gobierno H-23
+Actualizado : 2026-10-27  (sesion 7, 12:45)
+Commit      : 8cfec15 (H-25) · gate 19 ok / 0 fallas / 1 aviso
 Repo        : botmacro2-1  (desarrollo, local, SIN Docker) | botmacro = PRODUCCION (congelada)
 FASE        : 2 — intervenciones
-DB          : 914 señales (902 resueltas a 24h) · zona horaria = CARACAS (UTC−4)
-VENTANA     : 08:00-17:00 Caracas  ← la REAL (ver H-23 / E1)
+DB          : 914 señales (902 resueltas a 24h) · regime_state 2.496 filas (24 con la rama)
+VENTANA     : 04:00-16:00 Caracas, ciclo cada 15 min  (config + log del 27/10 12:38)
+SCHEDULER   : corriendo desde 12:38 — el lanzador ya arranca (H-25 cerrado)
 ```
 
 ---
 
 ## ✅ FUNCIONA (verificado)
 
-- [x] Pipeline completo C0 → C4 corre de punta a punta (`python main.py`), 8 celdas, sin excepciones
+- [x] Pipeline completo C0 → C4 corre de punta a punta (`python main.py`)
 - [x] `data/vault_v2.1.db` con **914 señales (902 resueltas a 24h)**
-- [x] **I-1** — Caja simétrica (`am` 0.5-2.0, `caja_p` ±2)
-- [x] **ADR 002** — umbral ADF unificado en 0.05, fuente única `CENTRAL_PARAMS["macro"]`
-- [x] **ADR 004** — Max DD con capital compuesto (H-15) + fuente única del ADF (H-12)
-- [x] **ADR 006** — ventana operativa configurable (H-17): VENTANA/CONTINUO, cruce de medianoche, días, CLI
-- [x] **H-3 / H-5** — carpetas `backups_v2.1`/`logs_v2.1` y `_migrar_v28` sobrescribe
-- [x] **Kit de git** — `git/guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`
-- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso · ahora valida los **13 ADRs**
-- [x] **Sin Docker en 2.1** (ADR 003) — producción intacta
-- [x] **H-9 CERRADO** — diagnóstico completo del `macro_score_v2` (5 scripts de análisis)
-- [x] **Zona horaria resuelta** — la DB guarda hora local Caracas (UTC−4), 3 pares epoch↔fecha
-- [x] **Segunda opinión** revisada; sus 3 errores corregidos (E1/E2/E3)
-- [x] **Plan de reorientación** escrito (Track A / B / C) — `docs/RELEVO_IA.md` §10
-- [x] **Gobierno H-22** — `AGENTS.md` §8-§12, `ESTADO.md`, `HANDOFF.md`, `PENDIENTES.md`, ADR 008-012
-- [x] **Prueba de adopción (27/10)** — una IA sin contexto leyó el repo y entendió todo;
-      **encontró 5 bugs del gobierno** (§13 de `AGENTS.md`)
+- [x] **H-24 CERRADO** — el motor de régimen **guarda** lo que calcula (antes fallaba
+      en silencio y se perdieron ~144 filas entre el 20/10 y el 27/10)
+- [x] **H-25 CERRADO** — los dos `.bat` corren: era un `|` sin escapar (CMD lo toma
+      como cañería) más finales de línea Unix. Probado: ciclo #1 completo en 55 s
+- [x] **ADR 016 escrito** — define qué es "tendencia" (falta implementarlo)
+- [x] **ADR 002** — umbral ADF unificado en 0.05 (fuente única)
+- [x] **I-1** caja simétrica · **ADR 004** Max DD · **ADR 006** ventana configurable
+- [x] **Kit de git** — `guardar.py`, `estado.py`, `deshacer.py`, `revisar_archivo.py`
+- [x] **`verificar.py`** — 19 ok / 0 fallas / 1 aviso (valida 13 ADRs con lista fija: B6)
+- [x] **Sin Docker en 2.1** (ADR 003) · **zona horaria** = hora local Caracas (UTC−4)
+- [x] **H-9 / H-10** cerrados con evidencia (score v2 sin poder predictivo; etiquetas comparables)
 
 ---
 
-## 📊 MÉTRICAS (24h, 877 resueltas del 23/10)
+## 📊 LO QUE MIDE HOY EL RÉGIMEN (27/10, n = 24 filas = 2 ciclos × 12 activos)
 
-| Corte | n | HR | PF | avg |
-|---|---|---|---|---|
-| **GLOBAL** | 877 | 44.7% | 0.80 | −0.156% |
-| LONG | 429 | 32.4% | **0.50** | −0.488% |
-| SHORT | 448 | 56.5% | **1.28** | +0,163% |
-| xyz:SILVER | 58 | 63.8% | 3.22 | +0,768% |
-| xyz:GOLD | 93 | 51.6% | 2.64 | +0,309% |
-| BTC | 64 | 23.4% | **0.30** | −0,630% |
-| xyz:SP500 | 88 | 39.8% | **0.28** | −0,351% |
+| Dato | Valor |
+|---|---|
+| RANGE | **24 / 24 (100%)** |
+| RAMA A (estacionaria, p ≤ 0,05) | **0 (0%)** |
+| RAMA B (deriva baja) | **24 (100%)** |
+| p-valores | 0,0819 – 0,8964 (ninguno ≤ 0,05) |
+| pendiente máxima | 1,822 %/día vs umbral 2,88 %/día = **63,2%** |
 
-**LONG pierde plata, SHORT gana.** Problema estructural, no de umbral.
-El k×σ (ADR 001) **no lo arregla**: el PF no depende del break-even.
-Asimetría confirmada por 3 métodos: MFE/MAE (LONG payoff **−2,9:1** · SHORT **1,75x**) ·
-movimiento contrario primero (LONG **54,0%** vs SHORT 34,3%) · PF por tipo (0,50 vs 1,28).
+**⇒ El ADF nunca decide; decide el umbral fijo de 0,0012.** Y ese umbral, medido,
+falla distinto según el activo: **0% de falsos positivos en un activo calmo y 43%
+en uno volátil** (la volatilidad entre los 12 activos varía **13,5×**).
+El test sobre el **precio** da 88% de falsos positivos (inválido); el de
+**retornos**, 3%.
+
+**⇒ Hoy ningún activo está en tendencia de verdad** (deriva ÷ σ ≤ 0,27). El
+"100% RANGE" actual es correcto; el bug es que la regla **no podría** decir TREND
+aunque hubiera una tendencia moderada.
 
 ---
 
-## 🧭 H-9 CERRADO — QUÉ ES REALMENTE MACRO2.1
+## 📊 ASIMETRÍA LONG / SHORT (24h, n=877 del 23/10)
 
-**El score v2 NO tiene poder predictivo demostrado. NO-GO.**
-ρ(ms2, pnl24) = **+0,119** dentro de RANGE. No separa nada.
+| Corte | n | HR | PF |
+|---|---|---|---|
+| GLOBAL | 877 | 44,7% | 0,80 |
+| LONG | 429 | 32,4% | **0,50** |
+| SHORT | 448 | 56,5% | **1,28** |
 
-| Hallazgo | Dato | Dónde |
+**LONG pierde plata, SHORT gana.** Confirmado por 3 métodos (MFE/MAE, movimiento
+contrario primero, PF por tipo). El k×σ (ADR 001) **no lo arregla**.
+
+---
+
+## 🔴 LOS 3 PROBLEMAS QUE MANDAN HOY
+
+| # | Qué | Consecuencia |
 |---|---|---|
-| `macro_score_v2 = 0.0` exacto | **768 de 914** = 13/10–19/10 = **PRE-DEPLOY, NO es bug vigente** | `data_quality_emision`=OK en las 768 |
-| Score v2 real | **146** = 19/10–23/10 (4 días) | |
-| El filtro de régimen **NO corrió** | **648 de 914 (71%)** con `p=1.0` = el DEFAULT del `except` | C3 líneas 1901-1925 |
-| `p<0,05` significa | **ESTACIONARIO**, no momentum | |
-| `riesgo_regime` real | NEUTRAL 83,4% / RISK_ON 13,0% / RISK_OFF 3,6% | |
-| `bias` real (audit) | RANGO 62,3% / BULL 18,7% / BEAR 18,7% | |
-| El sesgo multi-TF **SÍ funciona** | N/A sólo 5,6% (1D) · 5,8% (4H) · **0% (15m)** | |
-| El grano correcto | **CICLO**, no día: 25 ciclos / 146 señales | 3 ciclos del 20/10 con HR 0% · 3 del 21/10 con HR 85-89% |
-| El filtro real de emisión | **`rvd` > 0,3** (umbral legacy 2 ⇒ `rs=±2` alcanza solo) | C3 líneas 1500-1510, 260 |
-| El score v2 vs legacy | v2 sube caja/fvg y **baja el flujo** ⇒ es una **regresión** | |
-
-**⇒ ⭐ MACRO2.1 HOY ES UN DETECTOR DE FLUJO CON CONFLUENCIA, no un detector de
-tendencia macro. Y su sesgo (BULL/BEAR) es el MISMO número que el tipo de señal
-(LONG/SHORT) ⇒ no son dos señales, son una.**
-
-**⇒ El único dato de eficacia es INCONSISTENTE** (LONG+BULL: pre-deploy HR
-35,6% PF 0,52 · post-deploy HR 73,7% PF 9,24) ⇒ se resuelve SOLO con n suficiente.
-
----
-
-## 🔴 LOS 5 HALLAZGOS DE LA RONDA DEL 27/10 (los encontró una IA nueva)
-
-| # | Qué | Gravedad |
-|---|---|---|
-| **E1** | **La ventana real es 08:00-17:00** (`central_params.json` 231-246), no 04:00-16:00. La 4-16 **nunca se aplicó** ⇒ el gobierno mentía | 🔴 Alta |
-| **E2** | **5 archivos leen `data/vault_v2.db`, que no existe** (la real es `vault_v2.1.db`): `scheduler.py:190`, `reporter.py:1012`, `report_validator.py:38`, `validar_gem_macro.py:26`, `test_telegram.py:34` ⇒ leen una DB **vacía** ⇒ el resumen de Telegram de la mañana **nunca se envió** y los reportes salen vacíos. El pipeline C2→C4 **no** está afectado | 🔴 Media (H-12) |
-| **E3** | `AGENTS.md` §5.1.c contradice a §9 ⇒ un patch aditivo dejó secciones viejas que chocan | 🔴 Media |
-| **E4** | `ESTADO.md` declaraba un commit viejo | 🟡 Baja |
-| **E5** | El commit `baf6985` decía "versionar diagnostico_h9 y h10_h18" y no lo hizo (los excluye `diagnostico_*.py`, `.gitignore` línea 34) | ✅ Conocido |
-
-**⇒ ⭐⭐ CONSECUENCIA CRÍTICA: las señales de 19:00-21:00 (fuera de la
-ventana 8-17, bug H-20) son **la franja con el HR más alto medido**
-(20:00 → HR 76%, n=25). ⇒ Si se arregla H-20, **pueden desaparecer.**
-⇒ **El "edge" puede ser un artefacto de un bug de scheduler.**
-⇒ ⇒ **ADR 011 pierde su base** (proponía ampliar a 23:00 "para capturar" esa franja).
-⇒ ⇒ **H-20 sube de "menor" a CRÍTICO.**
+| **B1** | La regla de tendencia es un umbral fijo inalcanzable | 100% RANGE ⇒ no hay etiqueta de tendencia que validar. **El ADR 016 ya decidió el reemplazo; falta implementarlo** |
+| **B2** | El resolvedor no tiene tolerancia de distancia | **33%** de las validaciones a 4 h usan un precio a más de 2 h; **72 (7,9%)** son el precio de emisión ⇒ un tercio de las métricas a 4 h es dudoso |
+| **H-20** | **16,2% de las señales se emiten fuera de la ventana** (19–21 h) | Es **la franja con el HR más alto medido** (20:00 → 76%) ⇒ **el "edge" puede ser un artefacto de este bug** |
 
 ---
 
 ## ⚠️ RIESGOS CONOCIDOS
 
-| # | Riesgo | Impacto | Estado |
-|---|---|---|---|
-| **H-7a** | Backup de la DB solo en un disco | Hecho local, **falta Drive** | ❗ **PRIORIDAD #1 (manual)** |
-| **H-20** | **16,2% de las señales se emiten FUERA de la ventana** (19-21h) | **Puede ser el "edge" medido ⇒ puede desaparecer al arreglarlo** | 🔴 **NUEVO —>#1 técnico** |
-| **E2 / H-12** | 5 scripts leen `data/vault_v2.db` (no existe) | Reportes vacíos; el resumen de la mañana nunca se envió | 🔴 **NUEVO** |
-| **E1** | El gobierno dice una ventana y el código ejecuta otra | La ventana "acordada" nunca se aplicó | 🔴 **NUEVO** |
-| **E3** | `AGENTS.md` §5.1.c vs §9 | Contradicción en el documento que gobierna | 🔴 **NUEVO** |
-| **H-22** | El test de régimen falla en el 71% y deja `p=1.0` | La muestra de "señales con score" está **seleccionada por éxito del test** | 🔴 **>#1 técnico** |
-| **H-9** | `macro_score_v2` sin poder predictivo demostrado | NO-GO cerrado | ✅ **CERRADO (evidencia)** |
-| **H-10** | Las etiquetas no son comparables entre sí (19/10 = 1er deploy) | Confound temporal | ✅ RESUELTO |
-| **H-21** | `en_ventana()` trabaja con **hora entera** | `VENTANA_FIN` corta el ciclo de la hora final; no se puede expresar 03:40/17:20 | 🔴 Bloquea H-18/H-13 |
-| **H-18** | `RESOLUTION_WINDOWS_HOURS=[4,8,24]` hardcoded | Sin cortes intermedios ⇒ no se mide timing temprano | ⬜ PROPUESTO (ADR 007) — default **[4, 24]** |
-| **H-13** | `senales_metricas` no agrega por `calidad_senal_v2`; escala legacy 14/8/4 muerta | Métricas por etiqueta salen de una escala inalcanzable | ❗ Pendiente |
-| **H-14** | `_get_price_at_time` puede tomar precio posterior | 52% cambian de PnL, sesgo neto <1% | ❗ Pendiente |
-| **H-16** | "ganancia" con 2 definiciones | Impacto <1% en PF | ⏸️ Medido y diferido (ADR 004) |
-| **H-11** | `main.py` corre 8 celdas, no 9 | Cosmético, el mapa de AGENTS.md miente | ❗ Nuevo |
-| **H-2** | Dos ADF distintos (niveles C3_5 vs residuales FFD C3) | El régimen no mueve el conmutador | ❗ Pendiente |
-| **H-4** | `BREAKEVEN_THRESHOLD_PCT=0.05` fijo (≡ k=0,044σ) | Sesga HR (no el PF) | ❗ Pendiente → ADR 001 |
-| **H-6** | `SCORE_ALTA=14`/`MEDIA=8` con `macro_score` máx 6 | Código muerto | ❗ Pendiente |
-| **H-8** | 6 cripto pierden (BTC PF 0,30) mientras TradFi gana | Estructural | ❗ En investigación |
-| **H-7b** | 5 imports con fallback silencioso | Una regresión se degrupa sin avisar | ❗ Pendiente |
-| — | Rate limit de Hyperliquid | 1344 req/min > 1200 ⇒ **429**; ritmo 25-30 → **4-8 corridas/día** | 🔴 **Track A / A1** |
-| — | Logs sobrescritos | 39 líneas ⇒ el motivo de los 648 fallos del ADF se perdió | 🔴 **Track A / A4** |
-| — | `cycle_id` roto | join señales↔snapshot = **0/914** ⇒ auditoría rota | 🔴 **Track A / A2** |
-| — | `data_quality` siempre NULL | El dict real es `zonas["data_quality"]["estado"]` | 🔴 **Track A / A3** |
-| — | `duration_seconds` no es duración | No se puede medir el costo por ciclo | 🔴 **Track A / A5** |
-| — | `_classify_signal_quality_v2` usa `abs()` | Etiqueta invertida (RUIDO 71,4% > FUERTE 64,7%) | ⬜ **Track B / B3** |
-| — | `score_desglose["cvd_crud"]` mal nombrado | Ya produjo un error de análisis externo | ⬜ **Track A / A9** |
-| — | `verificar.py` no valida que los `.py` entregados queden versionados | Ya falló 2 veces | ⬜ **Nuevo** |
-| — | `verificar.py` no chequea los ADR 007-012 | Gate parcial | ✅ Resuelto (27/10) |
-
----
-
-## 🔒 ANTES DE CUALQUIER COSA
-
-**Subí `C:\Users\MD\Desktop\MACRO2.1_BACKUP\` a Drive.** El backup local ya
-está hecho (23/10): `vault_v2.1.db` + `env_respaldo.txt`. Es lo único del
-proyecto que **no** se recupera de GitHub. **`data/` está gitignored.**
+| # | Riesgo | Estado |
+|---|---|---|
+| **H-7a** | Backup de la DB sólo en un disco (**falta subirlo a Drive**) | ❗ prioridad manual #1 |
+| **E2 / H-12** | 5 scripts leen `data/vault_v2.db`, que no existe ⇒ reportes vacíos y el resumen de la mañana **nunca se envió** | 🔴 abierto |
+| **H-22** | El test de régimen falla en el 71% y deja `p=1.0` por defecto | 🔴 abierto |
+| **B4** | Render gratis borra el disco: 2.1 no tiene Litestream/R2 | 🔴 abierto |
+| **Rate limit HL** | 1.344 req/min > 1.200 ⇒ 429; ritmo actual 25–30 ⇒ **4–8 corridas/día** | 🔴 Track A |
+| **B3** | `cycle_id` roto: join señales↔snapshot = 0 | 🔴 abierto |
+| **B5** | El pipeline reescribe `central_params.json` en cada corrida ⇒ ensucia git | 🟡 P2 |
+| **B6** | `verificar.py` no mira los ADR 014 y 016 | 🟡 P2 |
+| **B7** | `.gitignore` oculta `diagnostico_*.py` | 🟡 P2 |
+| **H-21** | `en_ventana()` trabaja con hora entera | ⏸️ bloquea H-18/H-13 |
+| **H-18 / H-13 / H-14 / H-2 / H-4 / H-6 / H-8 / H-7b** | Detalle en `HANDOFF.md` y `docs/PENDIENTES.md` | ⏸️ diferidos |
 
 ---
 
 ## 🎯 SIGUIENTE PASO
 
-**1 · El diagnóstico C0→C4.** Prompt listo en
-`docs/PROMPT_DIAGNOSTICO_C0_C4.md`. Lo ejecuta una IA (o vos con
-`docs/RELEVO_IA.md` como contexto). Reglas: **ninguna corrección sin
-validador**, **si no sabés, investigá en internet y decile al usuario qué
-buscar**, y **ninguna de las 8 afirmaciones prohibidas**.
+**1 · Implementar el ADR 016** (lo que cierra B1). Hoy está en estado PROPUESTO:
+hay que pasarlo a ACEPTADO y después tocar el motor — retirar el umbral 0,0012,
+poner el test sobre los **retornos** (HAC, α=0,05 fijado antes), guardar `t` y `σ`
+con su migración, y validarlo con la serie sintética "tendencia moderada en activo
+calmo" (el código viejo dice RANGE; la regla nueva, TREND).
 
-**2 · Medir el cruce hora × dentro/fuera de la ventana (H-20).**
-Es lo que decide si el "edge" de las 20:00 es real o es el bug H-20.
-Cae dentro del diagnóstico.
+**2 · B2** (tolerancia de 30 min en el resolvedor) → **3 · B4** (Litestream) →
+**4 ·** los 30 días de datos con el protocolo OOS escrito **antes** de T₀ (ADR 012).
 
-**3 · Track A (eficiencia), en este orden** — el diseño de A1 ya está hecho
-(cache con TTL ≥900s · un solo fetch por ciclo compartido · token bucket a
-~600/min con backoff y `Retry-After` · WS con `HL_WS_URL` ya presente en
-CONFIG · auditar timeframes) y su métrica de no-regresión es:
-**requests/min p95 < 600 + la MISMA distribución de señales por activo/hora
-que antes (NO HR/PF: las etiquetas cambian con el tiempo).**
-   1. **A1** rate limit → 2. **A2** `cycle_id` → 3. **A3** `data_quality` →
-   4. **A0** test de régimen → 5. **A4/A5/A6** → 6. **A9** → 7. **H-21** →
-   8. **H-18** → 9. **H-13**
-
-**4 · Track C (protocolo OOS) se escribe ANTES de T₀** (ADR 012).
-**T₀ = fecha del deploy con el Track A listo.**
-**5 · Track B (B1/B3) sólo en T₀, prospectivo. B4 (limpiar el score) sólo
-DESPUÉS del veredicto.**
+**Pendiente transversal: ADR 013** — qué significa "confiable" (persistencia,
+acierto contra baseline, calibración). Mientras no exista, la `confidence` del
+motor es un **100 fijo** y la calibración no se puede medir.
 
 ---
 
@@ -184,4 +124,4 @@ DESPUÉS del veredicto.**
 - **1 a 4 comandos por turno.** Si uno depende del anterior, de a uno.
 - **No mezcles tareas:** cerrar el trabajo en curso antes de abrir el siguiente.
 - **Nunca escribir archivos sin "ok" explícito del usuario.**
-- **Después de un patch aditivo, releer el documento ENTERO** (lección del 27/10).
+- **Después de un patch aditivo, releer el documento ENTERO.**
