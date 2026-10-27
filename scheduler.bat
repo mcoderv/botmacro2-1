@@ -21,7 +21,7 @@ REM Verificar que existe el entorno virtual de MACRO2.1
 if not exist ".venv\Scripts\python.exe" (
     echo [ERROR] No se encuentra .venv\Scripts\python.exe
     echo Asegurate de que este archivo este dentro de la carpeta MACRO2.1
-    echo y de que el entorno virtual (.venv) este correctamente instalado.
+    echo y de que el entorno virtual .venv este correctamente instalado.
     pause
     exit /b 1
 )

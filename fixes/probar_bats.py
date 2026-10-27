@@ -78,6 +78,49 @@ def convertir(ruta):
     return True
 
 
+ESPECIALES = "|&<>"
+
+
+def revisar_contenido(ruta):
+    """Caracteres que CMD interpreta y rompen un echo o un bloque.
+
+    El 27/10 el lanzador fallaba por un '|' en el cartel: CMD lo toma como
+    cañeria y trata el texto de la derecha como un comando. Sin el dato del
+    fin de linea, el mismo bug daba otro mensaje ("en"). Los parentesis sin
+    escapar dentro de un bloque cierran el bloque antes de tiempo.
+    """
+    problemas = []
+    with open(ruta, encoding="utf-8", errors="replace") as f:
+        lineas = f.read().splitlines()
+    profundidad = 0
+    for num, linea in enumerate(lineas, 1):
+        s = linea.strip()
+        if not s or s.upper().startswith("REM"):
+            continue
+        es_echo = s.lower().startswith("echo")
+        j = 0
+        while j < len(s):
+            c = s[j]
+            if c == "^":            # caracter escapado: se saltea
+                j += 2
+                continue
+            if es_echo and c in ESPECIALES:
+                problemas.append((num, "'%s' sin escapar en un echo" % c))
+                break
+            if es_echo and profundidad > 0 and c in "()":
+                problemas.append((num, "parentesis '%s' sin escapar dentro de "
+                                      "un bloque" % c))
+                break
+            j += 1
+        if s.endswith("("):
+            profundidad += 1
+        elif s == ")":
+            profundidad = max(0, profundidad - 1)
+        elif s.startswith(")"):
+            profundidad = max(0, profundidad - 1)
+    return problemas
+
+
 def main():
     ap = argparse.ArgumentParser()
     grupo = ap.add_mutually_exclusive_group()
@@ -147,9 +190,15 @@ def main():
               % (rel, info["crlf"], info["lf_solo"],
                  "si" if info["bom"] else "no", estado))
 
+    sintaxis = []
+    for ruta in archivos:
+        rel = os.path.relpath(ruta, RAIZ)
+        for num, motivo in revisar_contenido(ruta):
+            sintaxis.append((rel, num, motivo))
+
     print("")
     print("=" * 62)
-    if problemas:
+    if problemas or sintaxis:
         print("FLAGS")
         for rel, info in problemas:
             detalle = []
@@ -158,13 +207,16 @@ def main():
             if info["bom"]:
                 detalle.append("BOM al inicio")
             print("  [F] %s: %s" % (rel, " y ".join(detalle)))
+        for rel, num, motivo in sintaxis:
+            print("  [F] %s:%d: %s" % (rel, num, motivo))
         print("")
-        print("RESULTADO: FALLA -> %d archivo(s) que CMD no va a interpretar bien"
-              % len(problemas))
-        print("Arreglo: python fixes\\probar_bats.py --aplicar")
+        print("RESULTADO: FALLA -> %d problema(s) que CMD no va a interpretar bien"
+              % (len(problemas) + len(sintaxis)))
+        print("Finales de linea: python fixes\\probar_bats.py --aplicar")
+        print("Caracteres especiales: se corrigen a mano (escapar con ^ o reescribir)")
         return 1
 
-    print("RESULTADO: PASA -> todos los .bat/.cmd tienen finales de Windows")
+    print("RESULTADO: PASA -> finales de Windows y sin caracteres que rompan el parseo")
     return 0
 
 
